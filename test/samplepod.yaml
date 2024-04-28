@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: samplepod
+  namespace: default
+  annotations: 
+    k8s.v1.cni.cncf.io/networks: macvlan-conf
+spec:
+  containers:
+  - name: samplepod
+    image: alpine
+    command: ["/bin/ash","-c","trap : TERM INT; sleep infinity & wait"]
+    envFrom:
+      - secretRef:
+          name: aws-credentials

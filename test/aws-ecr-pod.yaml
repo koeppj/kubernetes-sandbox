@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: aws-ecr-pod
+  namespace: default
+spec:
+  containers:
+    - name: aws-ecr-secret-update
+      image: localhost:32000/awsecr
+      command: ["/bin/ash","-c","trap : TERM INT; sleep infinity & wait"]
+      imagePullPolicy: Always
+      env:
+        - name: NAMESPACES
+          value: default
+      envFrom:
+        - secretRef:
+            name: aws-credentials

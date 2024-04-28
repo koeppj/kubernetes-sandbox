@@ -34,7 +34,7 @@ metadata:
   name: aws-ecr-secret-update
   namespace: infrastructure
 spec:
-  schedule: "* */8 * * *"
+  schedule: "*/5 * * * *"
   successfulJobsHistoryLimit: 2
   failedJobsHistoryLimit: 2
   jobTemplate:
