@@ -6,8 +6,8 @@ This project memorializes the setups performed to create my [MicroK8s](https://m
 
 ## TO-DO list
 
-- [] Update [Notes on Use](#notes-on-use) section.
-- [] Update [AWS Account Permissions](#aws-account-permissions) section.
+- [ ] Update [Notes on Use](#notes-on-use) section.
+- [ ] Update [AWS Account Permissions](#aws-account-permissions) section.
 
 ## Items Included
 
