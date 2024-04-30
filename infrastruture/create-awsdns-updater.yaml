@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "awsdns"
+  namespace: infrastructure
+  labels:
+    app: "awsdns"
+spec:
+  containers:
+  - name: awsdns
+    image: localhost:32000/awsdns
+    imagePullPolicy: Always
+    env:
+      - name: RUN_INTERVAL
+        value: "30"
+      - name: KUBE_HOST_IP
+        value: "${kube_host_ip}"
+    envFrom:
+      - secretRef:
+          name: aws-credentials

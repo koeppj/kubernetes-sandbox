@@ -40,14 +40,11 @@ spec:
     privateKeySecretRef:
       name: letsencrypt-stage
     solvers:
-    - selector: 
-        dnsZones:
-          - "johnkoepp.com"
-          - "koeppster.net"
-      dns01:
-        route53:
-          region: ${aws_default_region}
-          accessKeyID: ${aws_access_key_id}
-          secretAccessKeySecretRef:
-            name: aws_credentials
-            key: AWS_SECRET_ACCESS_KEY
+      - dns01:
+          route53:
+            hostedZoneID: Z2ZQWXQCY6FBE4
+            region: ${aws_default_region}
+            accessKeyID: ${aws_access_key_id}
+            secretAccessKeySecretRef:
+              name: aws-credentials
+              key: AWS_SECRET_ACCESS_KEY

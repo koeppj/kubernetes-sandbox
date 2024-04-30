@@ -6,8 +6,7 @@ if [ -f ~/.bash_aliases ]; then
     shopt -s expand_aliases
     source ~/.bash_aliases
 fi
-for namespace in ${NAMESPACES}
-do
+for namespace in ${NAMESPACES}; do
     AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
     AWS_ECR_TOKEN=$(aws ecr get-login --registry-ids ${AWS_ACCOUNT_ID} | cut -d' ' -f6)
     kubectl delete secret --ignore-not-found aws-ecr-secret
