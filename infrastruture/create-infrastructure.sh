@@ -9,14 +9,16 @@ if [ -f ~/.bash_aliases ]; then
     source ~/.bash_aliases
 fi
 #
-# Environment Variable Setups
+# Get project root.
 #
-export aws_access_key_id=$(sed -rn '/aws_access_key_id = /p' ~/.aws/credentials | cut -d '=' -f2 | tr -d '[:space:]')
-export aws_access_key_id_encoded=$(sed -rn '/aws_access_key_id = /p' ~/.aws/credentials | cut -d '=' -f2 | tr -d '[:space:]' | base64)
-export aws_secret_access_key=$(sed -rn '/aws_secret_access_key = /p' ~/.aws/credentials | cut -d '=' -f2 | tr -d '[:space:]')
-export aws_secret_access_key_encoded=$(sed -rn '/aws_secret_access_key = /p' ~/.aws/credentials | cut -d '=' -f2 | tr -d '[:space:]' | base64)
-export aws_default_region=$(sed -rn '/region = /p' ~/.aws/config | cut -d '=' -f2 | tr -d '[:space:]')
-export aws_default_region_encoded=$(sed -rn '/region = /p' ~/.aws/config | cut -d '=' -f2 | tr -d '[:space:]' | base64)
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+#
+# Environment Variable Setups.  
+#
+source $SCRIPT_DIR/../.env
+export aws_access_key_id_encoded=$(echo ${aws_access_key_id} | tr -d '[:space:]' | base64)
+export aws_secret_access_key_encoded=$(echo ${aws_secret_access_key} | tr -d '[:space:]' | base64)
+export aws_default_region_encoded=$(echo ${aws_default_region} | tr -d '[:space:]' | base64)
 export kube_host_ip=$(curl -s -4 icanhazip.com > /dev/null)
 #
 # Enable plugins
@@ -25,6 +27,7 @@ microk8s enable community
 microk8s enable registry
 microk8s enable cert-manager
 microk8s enable istio
+microk8s enable kwasm
 #
 # Install the CSI Driver so we can use NFS Storage
 #
@@ -43,12 +46,31 @@ docker build -t localhost:32000/awsdns --push -f awsdns.Dockerfile .
 #
 # Create/Update namespace
 #
-cat <<EOF | kubectl apply -f -
+cat <<EOF | microk8s kubectl apply -f -
 apiVersion: v1
 kind: Namespace
 metadata: 
     name: infrastructure
 EOF
+#
+# Create WASM Runtime Classes for SPIN and wasmedge
+#
+cat <<EOF | microk8s kubectl apply -f -
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+    name: wasmtime-spin
+handler: spin
+---
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+    name: wasmedge
+handler: wasmedge
+EOF
+#
+# Create other resources 
+#
 envsubst < create-aws-credentials.yaml | kubectl apply -f -
 envsubst < create-awsdns-updater.yaml | kubectl apply -f -
 microk8s kubectl apply -f aws-ecr-role-and-cron.yaml

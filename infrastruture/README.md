@@ -4,9 +4,15 @@
 
 ## Instructions
 
-To create run the following script.  Assumes aws cli configuration file present
-in ~/.aws/config and has beem configured with the appropriate AWS Key ID, AWS Access Key
-and AWS Default Region+
+Assumes and environment configuration file is pressent in <project_root>/.env that contains the following:
+
+```
+export aws_default_region=<default region>
+export aws_access_key_id=<aws access key id to use - DON'T USE ROOT KEY!!!>
+export aws_secret_access_key=<aws secret key assosciated with the above key id>
+```
+
+To create run environment the following script.  
 
 ```
 # ./create-infrastructure.sh
