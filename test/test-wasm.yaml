@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pyplay
+  namespace: default
+  labels:
+    app: pyplay
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pyplay
+  template:
+    metadata:
+      labels:
+        app: pyplay
+    spec:
+      runtimeClassName: wasmtime-spin
+      containers:
+      - name: pyplay
+        image: localhost:32000/spin-pyplay:latest
+        command: ["/"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pyplay-service
+  namespace: default
+spec:
+  selector:
+    app: pyplay
+  ports:
+  - name: pyplay-service-port
+    protocol: TCP
+    port: 80
+    targetPort: pyplay-port
+---
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: gateway
+  namespace: default
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port: 
+      number: 80
+      name: http
+      protocol: http
+    hosts:
+    - "*.local"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: pyplay-vservice
+  namespace: default
+  labels:
+    app: pyplay
+spec:
+  hosts:
+  - "pyplay.local"
+  gateways:
+  - gateway
+  http:
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        port:
+          number: 80
+        host: pyplay-service

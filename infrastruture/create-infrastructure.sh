@@ -73,6 +73,6 @@ EOF
 #
 envsubst < create-aws-credentials.yaml | kubectl apply -f -
 envsubst < create-awsdns-updater.yaml | kubectl apply -f -
-microk8s kubectl apply -f aws-ecr-role-and-cron.yaml
-microk8s kubectl apply -f create-storage-class.yaml
+envsubst < aws-ecr-role-and-cron.yaml | kubectl apply -f -
+kubectl apply -f create-storage-class.yaml
 envsubst < create-cert-issuer.yaml | kubectl apply -f -

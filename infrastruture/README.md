@@ -10,6 +10,7 @@ Assumes and environment configuration file is pressent in <project_root>/.env th
 export aws_default_region=<default region>
 export aws_access_key_id=<aws access key id to use - DON'T USE ROOT KEY!!!>
 export aws_secret_access_key=<aws secret key assosciated with the above key id>
+export namespaces=<command seperated list of namespaces for update secreets for>
 ```
 
 To create run environment the following script.  

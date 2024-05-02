@@ -50,7 +50,7 @@ spec:
             imagePullPolicy: Always
             env:
               - name: NAMESPACES
-                value: default
+                value: ${namespaces}
             envFrom:
               - secretRef:
                   name: aws-credentials
