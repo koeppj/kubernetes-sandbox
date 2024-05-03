@@ -27,7 +27,6 @@ microk8s enable community
 microk8s enable registry
 microk8s enable cert-manager
 microk8s enable istio
-microk8s enable kwasm
 #
 # Install the CSI Driver so we can use NFS Storage
 #
@@ -38,6 +37,27 @@ microk8s helm3 install csi-driver-nfs csi-driver-nfs/csi-driver-nfs \
     --set kubeletDir=/var/snap/microk8s/common/var/lib/kubelet
 # Wait for it to be ready
 microk8s kubectl wait pod --selector app.kubernetes.io/name=csi-driver-nfs --for condition=ready --namespace kube-system
+#
+# SpinKube Installation
+#
+microk8s kubectl apply -f https://github.com/spinkube/spin-operator/releases/download/v0.1.0/spin-operator.crds.yaml
+microk8s kubectl apply -f https://github.com/spinkube/spin-operator/releases/download/v0.1.0/spin-operator.runtime-class.yaml
+microk8s kubectl apply -f https://github.com/spinkube/spin-operator/releases/download/v0.1.0/spin-operator.shim-executor.yaml
+microk8s helm repo add kwasm http://kwasm.sh/kwasm-operator/
+microk8s helm install \
+  kwasm-operator kwasm/kwasm-operator \
+  --namespace kwasm \
+  --create-namespace \
+  --set kwasmOperator.installerImage=ghcr.io/spinkube/containerd-shim-spin/node-installer:v0.13.1
+
+microk8s kubectl annotate node --all kwasm.sh/kwasm-node=true
+# Install Spin Operator with Helm
+micro helm install spin-operator \
+  --namespace spin-operator \
+  --create-namespace \
+  --version 0.1.0 \
+  --wait \
+  oci://ghcr.io/spinkube/charts/spin-operator
 #
 # Create the docker images used
 #
@@ -53,7 +73,7 @@ metadata:
     name: infrastructure
 EOF
 #
-# Create WASM Runtime Classes for SPIN and wasmedge
+# Create WASM Runtime Classes for SpinKube
 #
 cat <<EOF | microk8s kubectl apply -f -
 apiVersion: node.k8s.io/v1
@@ -61,12 +81,6 @@ kind: RuntimeClass
 metadata:
     name: wasmtime-spin
 handler: spin
----
-apiVersion: node.k8s.io/v1
-kind: RuntimeClass
-metadata:
-    name: wasmedge
-handler: wasmedge
 EOF
 #
 # Create other resources 

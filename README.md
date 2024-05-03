@@ -8,6 +8,7 @@ This project memorializes the setups performed to create my [MicroK8s](https://m
 
 - [ ] Update [Notes on Use](#notes-on-use) section.
 - [ ] Update [AWS Account Permissions](#aws-account-permissions) section.
+- [x] Update [Infrastructure README](/README.md) to include [SpinKube](https://www.spinkube.dev/) install
 
 ## Items Included
 
@@ -18,7 +19,7 @@ This project memorializes the setups performed to create my [MicroK8s](https://m
 - TLS Certificate Generation using [cert-manager](https://microk8s.io/docs/addon-cert-manager) and [Let's Encrypt](https://letsencrypt.org/)
 - Automatic creaation of [AWS Route53](https://aws.amazon.com/route53/) A Records base on [Certificate](https://cert-manager.io/v1.8-docs/reference/api-docs/#cert-manager.io/v1.Certificate) resoures.
 - NFS based [StorageClass](https://kubernetes.io/docs/concepts/storage/storage-classes/) 
-- [Kwasm](https://microk8s.io/docs/addon-kwasm) plugin [RuntimeClass](https://kubernetes.io/docs/concepts/containers/runtime-class/)es for WebAssembly (both [spin](https://github.com/fermyon/spin) and [wasmedge](https://wasmedge.org/) runtimes)
+- [SpinKube](https://www.spinkube.dev/) for WebAssembly runtime support.
 
 ## Notes on use
 

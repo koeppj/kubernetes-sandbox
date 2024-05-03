@@ -2,6 +2,10 @@
 
 ## Overview
 
+** To Dos
+
+- [x] Update [create-infrstructure](create-infrastructure.sh) to exclude KWASM plugin and include SpinKube install.
+
 ## Instructions
 
 Assumes and environment configuration file is pressent in <project_root>/.env that contains the following:
