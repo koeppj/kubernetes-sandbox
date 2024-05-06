@@ -27,6 +27,7 @@ microk8s enable community
 microk8s enable registry
 microk8s enable cert-manager
 microk8s enable istio
+microk8s enable metallb:192.168.1.243-192.168.1.254
 #
 # Install the CSI Driver so we can use NFS Storage
 #
@@ -52,12 +53,16 @@ microk8s helm install \
 
 microk8s kubectl annotate node --all kwasm.sh/kwasm-node=true
 # Install Spin Operator with Helm
-micro helm install spin-operator \
+microk8s helm install spin-operator \
   --namespace spin-operator \
   --create-namespace \
   --version 0.1.0 \
   --wait \
   oci://ghcr.io/spinkube/charts/spin-operator
+#
+# Gateway API CRUDs
+#
+microk8s kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml
 #
 # Create the docker images used
 #

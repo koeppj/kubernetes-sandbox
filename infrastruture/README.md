@@ -17,6 +17,8 @@ export aws_secret_access_key=<aws secret key assosciated with the above key id>
 export namespaces=<command seperated list of namespaces for update secreets for>
 ```
 
+Make sure all nodes are joined to cluster before running the script.
+
 To create run environment the following script.  
 
 ```
