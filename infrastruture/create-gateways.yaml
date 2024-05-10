@@ -1,0 +1,38 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: koeppster-lan-gateway
+  namespace: infrastructure
+spec:
+  gatewayClassName: istio
+  listeners:
+    - name: http
+      hostname: "*.k8s.koeppster.lan"
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: All
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: johnkoepp-com-gateway
+  namespace: infrastructure
+spec:
+  gatewayClassName: istio
+  listeners:
+    - name: http
+      hostname: "*.johnkoepp.com"
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: https
+      hostname: "*.johnkoepp.com"
+      port: 443
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: All

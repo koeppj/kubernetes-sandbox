@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-awsecr
+  namespace: infrastructure
+spec:
+  serviceAccountName: ecr-update-service-account
+  restartPolicy: Never
+  containers:
+  - name: test-awser-pod
+    image: localhost:32000/awsecr
+    imagePullPolicy: Always
+    command: ["/bin/ash","-c","trap : TERM INT; sleep infinity & wait"]
+    env:
+      - name: NAMESPACES
+        value: default,infrastructure
+    envFrom:
+      - secretRef:
+          name: aws-credentials

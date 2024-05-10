@@ -1,35 +1,89 @@
-apiVersion: networking.istio.io/v1beta1
-kind: Gateway
+# Copyright Istio Authors
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
+##################################################################################################
+# httpbin service
+##################################################################################################
+apiVersion: v1
+kind: ServiceAccount
 metadata:
-  name: gateway
+  name: httpbin
   namespace: default
-spec:
-  selector:
-    istio: ingressgateway
-  servers:
-  - port: 
-      number: 80
-      name: http
-      protocol: http
-    hosts:
-    - "*.local"
 ---
-apiVersion: networking.istio.io/v1beta1
-kind: VirtualService
+apiVersion: v1
+kind: Service
 metadata:
-  name: httpbin-vservice
+  name: httpbin
+  namespace: default
+  labels:
+    app: httpbin
+    service: httpbin
+spec:
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8080
+  selector:
+    app: httpbin
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpbin
   namespace: default
 spec:
-  hosts:
-  - "pyplay.local"
-  gateways:
-  - gateway
-  http:
-  - match:
-    - uri:
-        prefix: /
-    route:
-    - destination:
-        port:
-          number: 8080
-        host: httpbin
+  replicas: 1
+  selector:
+    matchLabels:
+      app: httpbin
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: httpbin
+        version: v1
+    spec:
+      serviceAccountName: httpbin
+      containers:
+      - image: docker.io/kong/httpbin
+        imagePullPolicy: IfNotPresent
+        name: httpbin
+        # Same as found in Dockerfile's CMD but using an unprivileged port
+        command:
+        - gunicorn
+        - -b
+        - 0.0.0.0:8080
+        - httpbin:app
+        - -k
+        - gevent
+        env:
+        # Tells pipenv to use a writable directory instead of $HOME
+        - name: WORKON_HOME
+          value: /tmp
+        ports:
+        - containerPort: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httpbin-route
+  namespace: default
+spec:
+  parentRefs:
+    - name: koeppster-lan-gateway
+  hostnames: ["httpbin.k8s.koeppster.lan"]
+  rules:
+    - backendRefs:
+      - name: httpbin
+        port: 8080

@@ -27,6 +27,7 @@ microk8s enable community
 microk8s enable registry
 microk8s enable cert-manager
 microk8s enable istio
+microk8s enable rbac
 microk8s enable metallb:192.168.1.243-192.168.1.254
 #
 # Install the CSI Driver so we can use NFS Storage
@@ -62,12 +63,7 @@ microk8s helm install spin-operator \
 #
 # Gateway API CRUDs
 #
-microk8s kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml
-#
-# Create the docker images used
-#
-docker build -t localhost:32000/awsecr --push -f awsecr.Dockerfile .
-docker build -t localhost:32000/awsdns --push -f awsdns.Dockerfile .
+microk8s kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/experimental-install.yaml
 #
 # Create/Update namespace
 #
@@ -77,6 +73,18 @@ kind: Namespace
 metadata: 
     name: infrastructure
 EOF
+#
+# Install k83_gateway for external DNS, setting the domain and IP Port
+#
+microk8s helm repo add k8s_gateway https://ori-edge.github.io/k8s_gateway/
+microk8s helm install exdns --namespace infrastructure \
+  --set domain=k8s.koeppster.lan,service.type=LoadBalancer,service.loadBalancerIP=192.168.1.245 \
+  k8s_gateway/k8s-gateway
+#
+# Create the docker images used
+#
+docker build -t localhost:32000/awsecr --push -f awsecr.Dockerfile .
+docker build -t localhost:32000/awsdns --push -f awsdns.Dockerfile .
 #
 # Create WASM Runtime Classes for SpinKube
 #
@@ -95,3 +103,4 @@ envsubst < create-awsdns-updater.yaml | kubectl apply -f -
 envsubst < aws-ecr-role-and-cron.yaml | kubectl apply -f -
 kubectl apply -f create-storage-class.yaml
 envsubst < create-cert-issuer.yaml | kubectl apply -f -
+kubectl apply -f create-gateways.yaml

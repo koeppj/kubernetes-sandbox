@@ -10,22 +10,6 @@ spec:
   executor: containerd-shim-spin
 ---
 apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: pyplay-gateway
-  namespace: default
-spec:
-  gatewayClassName: istio
-  listeners:
-    - name: http
-      hostname: "*.k8s.koeppster.lan"
-      port: 80
-      protocol: HTTP
-      allowedRoutes:
-        namespaces:
-          from: Same
----
-apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: pyplay-route
@@ -34,13 +18,10 @@ metadata:
     app: pyplay
 spec:
   parentRefs:
-    - name: pyplay-gateway
+    - name: koeppster-lan-gateway
+      namespace: infrastructure
   hostnames: ["pyplay.k8s.koeppster.lan"]
   rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
+    - backendRefs:
       - name: pyplay-spinapp
         port: 80
