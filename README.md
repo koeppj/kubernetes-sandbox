@@ -27,7 +27,27 @@ This project memorializes the setups performed to create my [MicroK8s](https://m
 
 ### Automated TLS Certificate Generation
 
-### Automate Refresh of AWS ECR Access Tokens.
+Notes:
+- Two ClusterIssuers created.  Use cert-issuer-prod for production and cert-issuer-state for test.
+
+### Automated Refresh of AWS ECR Access Tokens.
+
+Notes
+- Scoped to namespaces with the label `koeppster.net/aws_enables=true`
+
+### Automated Generation of AWS Route33 A Records
+
+Creates A records for Certificate and HTTPRoute resources.
+- Scoped to resources with the label `koeppster.net/aws_status=waiting`
+- Will use FQDN in label `koeppster.net/aws_common_name` when creating A record.
+
+### Using k8s_gateway to connect to local lab DNS server
+
+### Gateaways created
+
+Two general purpose HTTP/s gateways creeated.
+- johnkoepp-com-gateway - For use with public facing services.
+- k8s-koeppster-lan-gateway - For use with lan faceing servies.
 
 ## Assumptions and Requirements
 

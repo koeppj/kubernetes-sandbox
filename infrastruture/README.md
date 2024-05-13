@@ -16,7 +16,8 @@ Assumes and environment configuration file is pressent in <project_root>/.env th
 export aws_default_region=<default region>
 export aws_access_key_id=<aws access key id to use - DON'T USE ROOT KEY!!!>
 export aws_secret_access_key=<aws secret key assosciated with the above key id>
-export namespaces=<command seperated list of namespaces for update secreets for>
+export aws_hosted_zone_id=<aws route53 zone ID that will be used by cert-manager>
+export ecrtoken_issuer_schedule<crontab like format for ecr update job i.e. "* */8 * * *">
 export cert_issuer_mode=<prod | stage>
 ```
 
@@ -44,4 +45,5 @@ The following files comprise the items used to create the `infrastructure` names
 - [`create-storage-class.yaml`](./create-storage-class.yaml) - A K8S manifest to create a `StorageClass` based on the [NFS CSI](https://github.com/kubernetes-csi/csi-driver-nfs) storage driver.  Based on [this](https://microk8s.io/docs/how-to-nfs) how-to.
 - [`create-awsdns-updater.yaml`](./create-awsdns-updater.yaml) - A K83 manifest to create a pod that continuously checks Certificates and creates AWS Route53 A records as required.
 - [`create-records.sh`](./create-records.sh) - Shell script that does the work of UPSERTing AWS Route53 A records based on Certificates.  See [AWSDNS](./awsdns.Dockerfile) Dockerfile.
-- [`redeploy-awsdns-updater.sh](./redeploy-awsdns-updater.sh) - Shell script to redeploy the AWS Route53 Updater stuff (for testing and if the public facing IP changes)
+- [`redeploy-awsdns-updater.sh`](./redeploy-awsdns-updater.sh) - Shell script to redeploy the AWS Route53 Updater stuff (for testing and if the public facing IP changes)
+- [`redeploy-awsecr-updater.sh`](./redeploy-awsecr-updater.sh) - Shell script to build/deploy the AWS ECR Token components.

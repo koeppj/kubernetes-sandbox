@@ -15,6 +15,9 @@ rules:
 - apiGroups: [""]
   resources: ["serviceaccounts"]
   verbs: ["patch", "get"]
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -35,7 +38,7 @@ metadata:
   name: aws-ecr-secret-update
   namespace: infrastructure
 spec:
-  schedule: "* */8 * * *"
+  schedule: "${ecrtoken_issuer_schedule}"
   successfulJobsHistoryLimit: 2
   failedJobsHistoryLimit: 2
   jobTemplate:
@@ -49,9 +52,6 @@ spec:
           - name: aws-ecr-secret-update
             image: localhost:32000/awsecr
             imagePullPolicy: Always
-            env:
-              - name: NAMESPACES
-                value: ${namespaces}
             envFrom:
               - secretRef:
                   name: aws-credentials

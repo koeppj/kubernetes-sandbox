@@ -13,7 +13,8 @@ IFS=','
 #
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
 AWS_ECR_TOKEN=$(aws ecr get-login --registry-ids ${AWS_ACCOUNT_ID} | cut -d' ' -f6)
-for NAMESPACE in ${NAMESPACES}; do
+NAMESPACE_LIST=$(kubectl get namespace -o jsonpath='{range .items[*]}{.metadata.name}{","}{end}' --selector=koeppster.net\/aws_enabled=true)
+for NAMESPACE in $NAMESPACE_LIST; do
     kubectl delete secret --ignore-not-found aws-ecr-secret
     kubectl create secret docker-registry aws-ecr-secret \
         --docker-server=https://${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com\ \

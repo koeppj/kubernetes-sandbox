@@ -51,8 +51,13 @@ microk8s helm install \
   --create-namespace \
   --set kwasmOperator.installerImage=ghcr.io/spinkube/containerd-shim-spin/node-installer:v0.13.1
 
+#
+# Annotate all nodes so they get the SpinKube operator
+# 
 microk8s kubectl annotate node --all kwasm.sh/kwasm-node=true
+#
 # Install Spin Operator with Helm
+#
 microk8s helm install spin-operator \
   --namespace spin-operator \
   --create-namespace \
@@ -99,6 +104,11 @@ metadata:
     name: wasmtime-spin
 handler: spin
 EOF
+#
+# Label namespaces so they get the aws ecr secrets 
+#
+kubectl label namespace --overwrite default koeppster.net\/aws_enabled=true
+kubectl label namespace --overwrite infrastructure koeppster.net\/aws_enabled=true
 #
 # Create other resources 
 #
