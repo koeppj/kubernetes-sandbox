@@ -25,7 +25,6 @@ export kube_host_ip=$(curl -s -4 icanhazip.com > /dev/null)
 #
 microk8s enable community
 microk8s enable registry
-microk8s enable cert-manager
 microk8s enable istio
 microk8s enable rbac
 microk8s enable metallb:192.168.1.243-192.168.1.254
@@ -65,6 +64,11 @@ microk8s helm install spin-operator \
 #
 microk8s kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/experimental-install.yaml
 #
+# cert-manager with Gateway API Auto Cert Provising installed
+#
+microk8s kubectl apply -f cert-manager.yaml
+
+#
 # Create/Update namespace
 #
 cat <<EOF | microk8s kubectl apply -f -
@@ -103,4 +107,5 @@ envsubst < create-awsdns-updater.yaml | kubectl apply -f -
 envsubst < aws-ecr-role-and-cron.yaml | kubectl apply -f -
 kubectl apply -f create-storage-class.yaml
 envsubst < create-cert-issuer.yaml | kubectl apply -f -
+envsubst < create-gateway-cert.yaml | kubectl apply -f -
 kubectl apply -f create-gateways.yaml

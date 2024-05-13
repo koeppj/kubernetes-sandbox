@@ -1,0 +1,20 @@
+#apiVersion: metallb.io/v1beta1
+#kind: IPAddressPool
+#metadata:
+#  name: default-addresspool
+#  namespace: metallb-system
+#spec:
+#  addresses:
+#  - 192.168.1.243-192.168.1.254
+#---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: default-advertise-all-pools
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+  - default-addresspool
+#  nodeSelectors:
+#  - matchLabels:
+#      kubernetes.io/hostame: ubuntu-slave1

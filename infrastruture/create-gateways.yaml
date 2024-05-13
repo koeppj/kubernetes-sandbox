@@ -1,3 +1,7 @@
+#
+# This gateway watched by k8s_gateway so localnet IPs available via local network
+# DNS
+#
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -14,6 +18,10 @@ spec:
         namespaces:
           from: All
 ---
+#
+# This gateway used for http routes accessed via port forward from outside local network
+# with public IPs
+#
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -32,7 +40,15 @@ spec:
     - name: https
       hostname: "*.johnkoepp.com"
       port: 443
-      protocol: HTTP
+      protocol: HTTPS
       allowedRoutes:
         namespaces:
           from: All
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: johnkoepp-com-tls
+            namespace: infrastructure
+  addresses:
+    - type: IPAddress
+      value: 192.168.1.246

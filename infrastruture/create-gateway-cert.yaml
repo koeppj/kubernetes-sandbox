@@ -1,0 +1,16 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: johnkoepp-com-tls
+  namespace: infrastructure
+spec:
+  secretName: johnkoepp-com-tls
+  subject:
+    organizations:
+      - koeppster-labs
+  dnsNames:
+    - "*.johnkoepp.com"
+  issuerRef:
+    name: cert-issuer-${cert_issuer_mode}
+    kind: ClusterIssuer
+
