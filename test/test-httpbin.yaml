@@ -81,6 +81,9 @@ kind: HTTPRoute
 metadata:
   name: httpbin-redirect
   namespace: default
+  labels: 
+    koeppster.net/aws_common_name: httpbin.johnkoepp.com
+    koeppster.net/aws_status: waiting
 spec:
   parentRefs:
     - name: johnkoepp-com-gateway

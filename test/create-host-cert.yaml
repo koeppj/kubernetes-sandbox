@@ -4,8 +4,8 @@ metadata:
   name: sandtest-johnkoepp-com
   namespace: default
   labels:
-    aws_common_name: sandtest.johnkoepp.com
-    aws_status: waiting
+    koeppster.net/aws_common_name: sandtest.johnkoepp.com
+    koeppster.net/aws_status: waiting
 spec:
   secretName: sandtest-johnkoepp-com-tls
   subject:

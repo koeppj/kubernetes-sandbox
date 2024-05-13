@@ -9,9 +9,12 @@ kind: ClusterRole
 metadata:
   name: get-certificates-cluster-role
 rules:
-- apiGroups: [""]
+- apiGroups: ["cert-manager.io"]
   resources: ["certificates"]
-  verbs: ["get"]
+  verbs: ["get","update","patch","list"]
+- apiGroups: ["gateway.networking.k8s.io"]
+  resources: ["httproutes"]
+  verbs: ["get","update","patch","list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

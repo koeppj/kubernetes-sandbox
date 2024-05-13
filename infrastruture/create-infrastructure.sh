@@ -19,7 +19,7 @@ source $SCRIPT_DIR/../.env
 export aws_access_key_id_encoded=$(echo ${aws_access_key_id} | tr -d '[:space:]' | base64)
 export aws_secret_access_key_encoded=$(echo ${aws_secret_access_key} | tr -d '[:space:]' | base64)
 export aws_default_region_encoded=$(echo ${aws_default_region} | tr -d '[:space:]' | base64)
-export kube_host_ip=$(curl -s -4 icanhazip.com > /dev/null)
+export kube_host_ip=$(curl -s -4 icanhazip.com)
 #
 # Enable plugins
 #
