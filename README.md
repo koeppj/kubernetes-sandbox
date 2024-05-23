@@ -2,14 +2,15 @@
 
 ## Overview
 
-This project memorializes the setups performed to create my [MicroK8s](https://microk8s.io/) environment.  It can used create/recreate the environment at will and as a model or other learnig, prototype and personal developent environents.
+This project memorializes the setups performed to create my [MicroK8s](https://microk8s.io/) environment.  It can used create/recreate the environment at will and as a model or other learnig, prototype and personal developent environments.
 
 ## TO-DO list
 
 - [ ] Update [Notes on Use](#notes-on-use) section.
 - [ ] Update [AWS Account Permissions](#aws-account-permissions) section.
 - [x] Update [Infrastructure README](/README.md) to include [SpinKube](https://www.spinkube.dev/) install
-- [ ] Update for using k8s_gateway
+- [x] Update for using k8s_gateway
+
 
 ## Items Included
 

@@ -4,10 +4,32 @@ metadata:
   name: kube-nfs
 provisioner: nfs.csi.k8s.io
 parameters:
-  server: ubuntu-slave1
+  server: 192.168.1.40
   share: /srv/kube-lv
+  mountPermissions: "0777"
 reclaimPolicy: Delete
 volumeBindingMode: Immediate
 mountOptions:
-  - hard
-  - nfsvers=4.2
+  - auto
+  - nofail
+  - nolock
+  - intr
+  - tcp
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-nfs
+provisioner: nfs.csi.k8s.io
+parameters:
+  server: 192.168.1.40
+  share: /srv/nfs-lv
+  mountPermissions: "0777"
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+mountOptions:
+  - auto
+  - nofail
+  - nolock
+  - intr
+  - tcp

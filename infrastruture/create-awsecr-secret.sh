@@ -15,8 +15,8 @@ AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
 AWS_ECR_TOKEN=$(aws ecr get-login --registry-ids ${AWS_ACCOUNT_ID} | cut -d' ' -f6)
 NAMESPACE_LIST=$(kubectl get namespace -o jsonpath='{range .items[*]}{.metadata.name}{","}{end}' --selector=koeppster.net\/aws_enabled=true)
 for NAMESPACE in $NAMESPACE_LIST; do
-    kubectl delete secret --ignore-not-found aws-ecr-secret
-    kubectl create secret docker-registry aws-ecr-secret \
+    kubectl delete secret --ignore-not-found -n $NAMESPACE aws-ecr-secret 
+    kubectl create secret -n $NAMESPACE docker-registry aws-ecr-secret \
         --docker-server=https://${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com\ \
         --docker-username=AWS \
         --docker-password="${AWS_ECR_TOKEN}" \
