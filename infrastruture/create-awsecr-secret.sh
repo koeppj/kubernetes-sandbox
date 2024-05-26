@@ -17,7 +17,7 @@ NAMESPACE_LIST=$(kubectl get namespace -o jsonpath='{range .items[*]}{.metadata.
 for NAMESPACE in $NAMESPACE_LIST; do
     kubectl delete secret --ignore-not-found -n $NAMESPACE aws-ecr-secret 
     kubectl create secret -n $NAMESPACE docker-registry aws-ecr-secret \
-        --docker-server=https://${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com\ \
+        --docker-server=https://${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com \
         --docker-username=AWS \
         --docker-password="${AWS_ECR_TOKEN}" \
         --docker-email=monitor@koeppster.net

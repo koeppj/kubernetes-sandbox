@@ -115,6 +115,7 @@ spec:
       volumes:
         - name: jenkins-data
           persistentVolumeClaim:
+            claimName: jenkins-pv-claim
 ---
 apiVersion: v1
 kind: Service
