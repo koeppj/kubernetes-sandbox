@@ -29,6 +29,7 @@ microk8s enable cert-manager
 microk8s enable metallb:192.168.1.243-192.168.1.254
 microk8s enable registry
 microk8s enable istio
+microk8s enable metrics-server
 #
 # Install the CSI Driver so we can use NFS Storage
 #
