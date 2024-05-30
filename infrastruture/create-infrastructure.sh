@@ -70,7 +70,10 @@ microk8s helm install spin-operator \
 # Gateway API CRUDs
 #
 microk8s kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/experimental-install.yaml
-
+#
+# Update istio config to watch for Gateway API Alpha records (like TCPRoute)
+#
+sudo microk8s istio install -c /var/snap/microk8s/current/credentials/client.config install --set profile=demo -f pilot_k8s.yaml
 #
 # Create/Update namespace
 #
