@@ -12,13 +12,9 @@ kind: Service
 metadata:
   name: httpbin
   namespace: default
-  labels:
-    app: httpbin
-    service: httpbin
 spec:
   ports:
-  - name: http
-    port: 80
+  - port: 80
     targetPort: 80
   selector:
     app: httpbin
@@ -28,17 +24,17 @@ kind: Deployment
 metadata:
   name: httpbin
   namespace: default
+  labels:
+    app: httpbin
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: httpbin
-      version: v1
   template:
     metadata:
       labels:
         app: httpbin
-        version: v1
     spec:
       serviceAccountName: httpbin
       containers:
@@ -58,10 +54,16 @@ spec:
     - name: johnkoepp-com-gateway
       namespace: infrastructure
       sectionName: https
+      port: 443
   hostnames: ["httpbin.johnkoepp.com"]
   rules:
-    - backendRefs:
+    - matches:
+      - path:
+          type: PathPrefix
+          value: /
+      backendRefs:
       - name: httpbin
+        namespace: default
         port: 80
 ---
 apiVersion: gateway.networking.k8s.io/v1
@@ -77,6 +79,7 @@ spec:
     - name: johnkoepp-com-gateway
       namespace: infrastructure
       sectionName: http
+      port: 80
   hostnames: ["httpbin.johnkoepp.com"]
   rules:
     - filters:

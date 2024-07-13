@@ -73,7 +73,7 @@ microk8s kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/release
 #
 # Update istio config to watch for Gateway API Alpha records (like TCPRoute)
 #
-sudo microk8s istio install -c /var/snap/microk8s/current/credentials/client.config install --set profile=demo -f pilot_k8s.yaml
+sudo microk8s istioctl install -c /var/snap/microk8s/current/credentials/client.config install --set profile=demo -f pilot_k8s.yaml
 #
 # Create/Update namespace
 #

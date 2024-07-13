@@ -19,7 +19,7 @@ spec:
           region: ${aws_default_region}
           accessKeyID: ${aws_access_key_id}
           secretAccessKeySecretRef:
-            name: aws_credentials
+            name: aws-credentials
             key: AWS_SECRET_ACCESS_KEY
 ---
 apiVersion: cert-manager.io/v1
