@@ -4,7 +4,7 @@ metadata:
   name: kube-nfs
 provisioner: nfs.csi.k8s.io
 parameters:
-  server: 192.168.1.40
+  server: ${nfs_server_ip}
   share: /srv/kube-lv
   mountPermissions: "0777"
 reclaimPolicy: Delete
@@ -22,7 +22,7 @@ metadata:
   name: nfs-nfs
 provisioner: nfs.csi.k8s.io
 parameters:
-  server: 192.168.1.40
+  server: ${nfs_server_ip}
   share: /srv/nfs-lv
   mountPermissions: "0777"
 reclaimPolicy: Delete
