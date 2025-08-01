@@ -55,3 +55,12 @@ spec:
             envFrom:
               - secretRef:
                   name: aws-credentials
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: local-registry
+                    operator: In
+                    values:
+                    - "yes"

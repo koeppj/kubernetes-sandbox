@@ -86,7 +86,7 @@ EOF
 #
 # Install k83_gateway for external DNS, setting the domain and IP Port
 #
-microk8s helm repo add k8s_gateway https://ori-edge.github.io/k8s_gateway/
+microk8s helm repo add k8s_gateway https://k8s-gateway.github.io/k8s_gateway
 microk8s helm install exdns --namespace infrastructure \
   --set domain=k8s.koeppster.lan,service.type=LoadBalancer,service.loadBalancerIP=192.168.1.245 \
   k8s_gateway/k8s-gateway
