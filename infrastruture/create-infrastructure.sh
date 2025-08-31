@@ -41,6 +41,10 @@ microk8s helm3 install csi-driver-nfs csi-driver-nfs/csi-driver-nfs \
 # Wait for it to be ready
 microk8s kubectl wait pod --selector app.kubernetes.io/name=csi-driver-nfs --for condition=ready --namespace kube-system
 #
+# Annotate all nodes so they get the SpinKube operator
+# 
+microk8s kubectl annotate node --all kwasm.sh/kwasm-node=true
+#
 # SpinKube Installation
 #
 microk8s kubectl apply -f https://github.com/spinframework/spin-operator/releases/download/v0.6.1/spin-operator.runtime-class.yaml
@@ -51,18 +55,9 @@ microk8s kubectl annotate node --all kwasm.sh/kwasm-node=true
 microk8s helm install spin-operator --namespace spin-operator --create-namespace --version 0.6.1 --wait oci://ghcr.io/spinframework/charts/spin-operator
 microk8s kubectl apply -f https://github.com/spinframework/spin-operator/releases/download/v0.6.1/spin-operator.shim-executor.yaml
 #
-# Annotate all nodes so they get the SpinKube operator
-# 
-microk8s kubectl annotate node --all kwasm.sh/kwasm-node=true
+# Addition clkuster role for Gateway and HTTPRoute support
 #
-# Install Spin Operator with Helm
-#
-microk8s helm install spin-operator \
-  --namespace spin-operator \
-  --create-namespace \
-  --version 0.1.0 \
-  --wait \
-  oci://ghcr.io/spinkube/charts/spin-operator
+microk8s kubectl apply -f exdns-role-bindings.yaml
 #
 # Gateway API CRUDs
 #
@@ -86,6 +81,7 @@ EOF
 microk8s helm repo add k8s_gateway https://k8s-gateway.github.io/k8s_gateway
 microk8s helm install exdns --namespace infrastructure \
   --set domain=k8s.koeppster.lan,service.type=LoadBalancer,service.loadBalancerIP=192.168.1.245 \
+  --set "resources={Ingress,Service,HTTPRoute,Gateway}"
   k8s_gateway/k8s-gateway
 #
 # Create the docker images used

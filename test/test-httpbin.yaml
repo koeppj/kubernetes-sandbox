@@ -97,7 +97,8 @@ spec:
   parentRefs:
     - name: koeppster-lan-gateway
       namespace: infrastructure
-  hostnames: ["httpbin.k8s.koeppster.lan"]
+  hostnames: 
+    - httpbin.k8s.koeppster.lan
   rules:
     - backendRefs:
       - name: httpbin

@@ -1,27 +1,25 @@
-apiVersion: core.spinoperator.dev/v1alpha1
+apiVersion: core.spinkube.dev/v1alpha1
 kind: SpinApp
 metadata:
-  name: pyplay-spinapp
-  labels:
-    app: pyplay
+  name: simple-spinapp
 spec:
-  image: "localhost:32000/spin-pyplay:latest"
+  image: "ghcr.io/spinkube/containerd-shim-spin/examples/spin-rust-hello:v0.13.0"
   replicas: 1
   executor: containerd-shim-spin
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: pyplay-route
+  name: simple-spinapp-route
   namespace: default
   labels:
-    app: pyplay
+    app: simple-spinapp
 spec:
   parentRefs:
     - name: koeppster-lan-gateway
       namespace: infrastructure
-  hostnames: ["pyplay.k8s.koeppster.lan"]
+  hostnames: ["simple-span.k8s.koeppster.lan"]
   rules:
     - backendRefs:
-      - name: pyplay-spinapp
+      - name: simple-spinapp
         port: 80

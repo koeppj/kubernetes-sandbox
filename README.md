@@ -22,7 +22,7 @@ This project memorializes the setups performed to create my [MicroK8s](https://m
 - Automatic creaation of [AWS Route53](https://aws.amazon.com/route53/) A Records base on [Certificate](https://cert-manager.io/v1.8-docs/reference/api-docs/#cert-manager.io/v1.Certificate) resoures.
 - NFS based [StorageClass](https://kubernetes.io/docs/concepts/storage/storage-classes/) 
 - [SpinKube](https://www.spinkube.dev/) for WebAssembly runtime support.
-- [k8s_gateway](https://github.com/ori-edge/k8s_gateway) for providing DNS Service for externally exposed [Gateway](https://gateway-api.sigs.k8s.io/) routes.
+- [k8s_gateway](https://github.com/k8s-gateway/k8s_gateway) for providing DNS Service for externally exposed [Gateway](https://gateway-api.sigs.k8s.io/) routes.
 
 ## Notes on use
 
