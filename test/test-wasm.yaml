@@ -2,6 +2,7 @@ apiVersion: core.spinkube.dev/v1alpha1
 kind: SpinApp
 metadata:
   name: simple-spinapp
+  namespace: default
 spec:
   image: "ghcr.io/spinkube/containerd-shim-spin/examples/spin-rust-hello:v0.13.0"
   replicas: 1
@@ -18,7 +19,7 @@ spec:
   parentRefs:
     - name: koeppster-lan-gateway
       namespace: infrastructure
-  hostnames: ["simple-span.k8s.koeppster.lan"]
+  hostnames: ["simple-spin.k8s.koeppster.lan"]
   rules:
     - backendRefs:
       - name: simple-spinapp

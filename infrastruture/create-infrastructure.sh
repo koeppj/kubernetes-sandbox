@@ -53,7 +53,8 @@ microk8s helm repo add kwasm http://kwasm.sh/kwasm-operator/
 microk8s helm install kwasm-operator kwasm/kwasm-operator --namespace kwasm --create-namespace --set kwasmOperator.installerImage=ghcr.io/spinframework/containerd-shim-spin/node-installer:v0.21.0
 microk8s kubectl annotate node --all kwasm.sh/kwasm-node=true
 microk8s helm install spin-operator --namespace spin-operator --create-namespace --version 0.6.1 --wait oci://ghcr.io/spinframework/charts/spin-operator
-microk8s kubectl apply -f https://github.com/spinframework/spin-operator/releases/download/v0.6.1/spin-operator.shim-executor.yaml
+# Install the SpinKube Shim Executor to default namespace
+microk8s kubectl apply -n default -f https://github.com/spinframework/spin-operator/releases/download/v0.6.1/spin-operator.shim-executor.yaml
 #
 # Addition clkuster role for Gateway and HTTPRoute support
 #
