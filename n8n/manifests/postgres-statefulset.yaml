@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name:  postgres-n8n
+  namespace: n8n
+  labels:
+    app:  postgres-n8n
+spec:
+  serviceName: postgres-n8n
+  selector:
+    matchLabels:
+      app: postgres-n8n
+  replicas: 1
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 25%
+    type: RollingUpdate
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Delete
+  volumeClaimTemplates:
+  - metadata:
+      name: database-data
+    spec:
+      storageClassName: kube-nfs
+      accessModes:
+      - ReadWriteMany
+      resources:
+        requests:
+          storage: 2Gi
+  template:
+    metadata:
+      labels:
+        app:  postgres-n8n
+    spec:
+      hostname: postgres-n8n
+      containers:
+      - name:  postgres-n8n
+        image:  postgres:11
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1000Mi
+        envFrom:
+        - secretRef:
+            name: postgres-secret
+        env:
+          - name: POSTGRES_DB
+            value: n8n
+          - name:   POSTGRES_HOST
+            value: postgres-n8n
+          - name: POSTGRES_PORT
+            value: '5432'
+        ports:
+        - containerPort: 5432
+          name:  database-port
+        volumeMounts:
+        - name: database-data
+          mountPath: /var/lib/postgresql
+        - name: init-data
+          mountPath: /docker-entrypoint-initdb.d/init-n8n-user.sh
+          subPath: init-data.sh
+          readOnly: true
+      restartPolicy: Always
+      volumes:
+      - name: init-data
+        configMap:
+          name: init-data
+          defaultMode: 0755
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-n8n
+  namespace: n8n
+spec:
+  selector:
+    app: postgres-n8n
+  type: ClusterIP
+  ports:
+  - name: postgres
+    protocol: TCP
+    port: 5432
+    targetPort: database-port
