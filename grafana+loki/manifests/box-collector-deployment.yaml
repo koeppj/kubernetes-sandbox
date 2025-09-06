@@ -30,7 +30,7 @@ spec:
       containers:
         - name: collector
           image: localhost:32000/boxevents:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           resources:
             requests:
               cpu: "50m"
@@ -47,7 +47,7 @@ spec:
               value: http://loki.grafana.svc.cluster.local:3100/loki/api/v1/push
             # one-time backfill if no saved position
             - name: BACKFILL_START_DATE
-              value: 2025-08-01T00:00:00Z
+              value: "2025-08-30T00:00:00Z"
             # timing controls
             - name: POLL_INTERVAL_SEC
               value: "300"

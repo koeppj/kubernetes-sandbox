@@ -24,6 +24,7 @@ This project memorializes the setups performed to create my [MicroK8s](https://m
 - [SpinKube](https://www.spinkube.dev/) for WebAssembly runtime support.
 - [k8s_gateway](https://github.com/k8s-gateway/k8s_gateway) for providing DNS Service for externally exposed [Gateway](https://gateway-api.sigs.k8s.io/) routes.
 - [n8n Community Edition](https://docs.n8n.io/) as an optional install.
+- [Grafana+Loki])(https://grafana.com/docs/loki/latest/) as an optional install.
 
 ## Notes on use
 
