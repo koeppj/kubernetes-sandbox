@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: box-event-collector
+  namespace: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: box-event-collector
+  template:
+    metadata:
+      labels:
+        app: box-event-collector
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: local-registry
+                operator: In
+                values:
+                - "yes"
+      containers:
+        - name: collector
+          image: localhost:32000/boxevents:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          env:
+            - name: BOX_CONFIG_JSON
+              value: /var/run/box/box-config.json
+            - name: COLLECTOR_CONFIG
+              value: /config
+            - name: LOKI_URL
+              value: http://loki.grafana.svc.cluster.local:3100/loki/api/v1/push
+            # one-time backfill if no saved position
+            - name: BACKFILL_START_DATE
+              value: 2025-08-01T00:00:00Z
+            # timing controls
+            - name: POLL_INTERVAL_SEC
+              value: "300"
+            - name: LOKI_TIMEOUT_SEC
+              value: "10"
+            - name: RETRY_BASE_SLEEP_SEC
+              value: "5"
+            - name: RETRY_MAX_RETRIES
+              value: "3"
+            - name: RETRY_BACKOFF_FACTOR
+              value: "2"
+            - name: FUTURE_SKEW_SEC
+              value: "300"
+          volumeMounts:
+            - name: box-config
+              mountPath: /var/run/box/box-config.json
+              subPath: box-config.json
+              readOnly: true
+            - name: state
+              mountPath: /config
+      volumes:
+        - name: box-config
+          secret:
+            secretName: box-jwt
+        - name: state
+          persistentVolumeClaim:
+            claimName: box-collector-pv-claim

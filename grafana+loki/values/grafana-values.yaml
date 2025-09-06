@@ -1,0 +1,25 @@
+adminPassword: "Fdv$#g8EE*&"            # change
+service:
+  type: ClusterIP
+persistence:
+  enabled: true
+  existingClaim: grafana-pv-claim
+initChownData: 
+  enabled: false
+podSecurityContext:
+  runAsUser: 472
+  runAsGroup: 472
+  fsGroup: 472
+  fsGroupChangePolicy: OnRootMismatch
+containerSecurityContext:
+  runAsUser: 472
+  runAsGroup: 472
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://loki.grafana.svc.cluster.local:3100
+        isDefault: true
