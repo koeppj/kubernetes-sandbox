@@ -19,9 +19,14 @@ export aws_secret_access_key=<aws secret key assosciated with the above key id>
 export aws_hosted_zone_id=<aws route53 zone ID that will be used by cert-manager>
 export ecrtoken_issuer_schedule<crontab like format for ecr update job i.e. "* */8 * * *">
 export cert_issuer_mode=<prod | stage>
+export nfs_server_id=<ip address of NFS Server by storage NFS CNI Storage>
 ```
 
 Make sure all nodes are joined to cluster before running the script.
+
+Label specific nodes in the following manner:
+* Nodes with wired connections (i.e. supporting promiscous mode) should have a label of `net:wired`
+* Control Node (the node running register) should be labeled `local-registry: "yes"`
 
 ### Installation
 

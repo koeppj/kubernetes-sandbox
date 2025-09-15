@@ -28,7 +28,7 @@ loki:
     delete_request_cancel_period: 24h
 
   limits_config:
-    retention_period: 336h           
+    retention_period: 672h           
 
 persistence:
   enabled: true

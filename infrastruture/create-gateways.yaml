@@ -1,4 +1,14 @@
 #
+# Create the Envoy GatewayClass and two Gateways
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg
+  namespace: infrastructure
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+#
 # This gateway watched by k8s_gateway so localnet IPs available via local network
 # DNS
 #
@@ -8,7 +18,7 @@ metadata:
   name: koeppster-lan-gateway
   namespace: infrastructure
 spec:
-  gatewayClassName: istio
+  gatewayClassName: eg
   listeners:
     - name: http
       hostname: "*.k8s.koeppster.lan"
@@ -17,6 +27,9 @@ spec:
       allowedRoutes:
         namespaces:
           from: All
+  addresses:
+    - type: IPAddress
+      value: 192.168.1.244
 ---
 #
 # This gateway used for http routes accessed via port forward from outside local network
@@ -28,7 +41,12 @@ metadata:
   name: johnkoepp-com-gateway
   namespace: infrastructure
 spec:
-  gatewayClassName: istio
+  gatewayClassName: eg
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: envoy-proxy-patch
   listeners:
     - name: http
       hostname: "*.johnkoepp.com"

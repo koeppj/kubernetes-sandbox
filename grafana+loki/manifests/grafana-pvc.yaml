@@ -4,9 +4,9 @@ metadata:
   name: grafana-pv-claim
   namespace: grafana
 spec:
-  storageClassName: kube-nfs
+  storageClassName: kube-grafana
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 200Gi
+      storage: 2Gi

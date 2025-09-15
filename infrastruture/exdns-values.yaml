@@ -1,0 +1,5 @@
+service:
+  type: LoadBalancer
+  loadBalancerIP: 192.168.1.245
+domain: k8s.koeppster.lan
+watchedResources: ["Ingress", "Service", "HTTPRoute", "Gateway"]

@@ -15,7 +15,7 @@ This project memorializes the setups performed to create my [MicroK8s](https://m
 ## Items Included
 
 - [Multus](https://github.com/k8snetworkplumbingwg/multus-cni) plug-in for multiple network support (for stuff like macvlans).
-- The [Istio](https://istio.io/latest/docs/setup/platform-setup/microk8s/) plug-in [Gateway API Support](https://kubernetes.io/docs/concepts/services-networking/gateway/).
+- The [Envory](https://gateway.envoyproxy.io/) used to provide [Gateway API Support](https://kubernetes.io/docs/concepts/services-networking/gateway/).
 - AWS Secrets
 - AWS ECR Token Refesh Job Setup to support pulling images from an [AWS Elastic Container Registry](https://aws.amazon.com/ecr/)
 - TLS Certificate Generation using [cert-manager](https://microk8s.io/docs/addon-cert-manager) and [Let's Encrypt](https://letsencrypt.org/)

@@ -1,0 +1,17 @@
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: envoy-proxy-patch
+  namespace: infrastructure
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              type: LoadBalancer
+              externalTrafficPolicy: Cluster   
+              loadBalancerIP: 192.168.1.246

@@ -1,5 +1,9 @@
 #!/bin/bash
-
+# First check if aliases are used
+if [ -f ~/.bash_aliases ]; then
+    shopt -s expand_aliases
+    source ~/.bash_aliases
+fi
 #
 # Get project root.
 #
@@ -13,6 +17,7 @@ export values_dir=$SCRIPT_DIR/../values
 export secrets_dir=$SCRIPT_DIR/../secrets
 
 microk8s helm repo add grafana https://grafana.github.io/helm-charts
+envsubst < $manifests_dir/grafana-storage-class.yaml | microk8s kubectl apply -f -
 microk8s kubectl apply -f $manifests_dir/grafana-namespace.yaml
 microk8s kubectl apply -f $manifests_dir/loki-pvc.yaml
 microk8s kubectl apply -f $manifests_dir/grafana-pvc.yaml

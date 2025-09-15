@@ -27,9 +27,29 @@ microk8s enable community
 microk8s enable rbac
 microk8s enable cert-manager
 microk8s enable metallb:192.168.1.243-192.168.1.254
+// Patch metallb to only advertise on wired interfaces
+microk8s kubectl -n metallb-system patch l2advertisement default-advertise-all-pools \
+  --type merge \
+  -p '{
+    "spec": {
+      "nodeSelectors": [
+        {
+          "matchLabels": {
+            "net": "wired"
+          }
+        }
+      ]
+    }
+  }'
+
 microk8s enable registry
-microk8s enable istio
 microk8s enable metrics-server
+microk8s enable kwasm
+#
+# Install Envoy for Gateway API support
+#
+microk8s helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.5.0 -n envoy-gateway-system --create-namespace
+microk8s kubectl wait --timeout=5m -n envoy-gateway-system deployment/envoy-gateway --for=condition=Available
 #
 # Install the CSI Driver so we can use NFS Storage
 #
@@ -45,28 +65,9 @@ microk8s kubectl wait pod --selector app.kubernetes.io/name=csi-driver-nfs --for
 # 
 microk8s kubectl annotate node --all kwasm.sh/kwasm-node=true
 #
-# SpinKube Installation
-#
-microk8s kubectl apply -f https://github.com/spinframework/spin-operator/releases/download/v0.6.1/spin-operator.runtime-class.yaml
-microk8s kubectl apply -f https://github.com/spinframework/spin-operator/releases/download/v0.6.1/spin-operator.crds.yaml
-microk8s helm repo add kwasm http://kwasm.sh/kwasm-operator/
-microk8s helm install kwasm-operator kwasm/kwasm-operator --namespace kwasm --create-namespace --set kwasmOperator.installerImage=ghcr.io/spinframework/containerd-shim-spin/node-installer:v0.21.0
-microk8s kubectl annotate node --all kwasm.sh/kwasm-node=true
-microk8s helm install spin-operator --namespace spin-operator --create-namespace --version 0.6.1 --wait oci://ghcr.io/spinframework/charts/spin-operator
-# Install the SpinKube Shim Executor to default namespace
-microk8s kubectl apply -n default -f https://github.com/spinframework/spin-operator/releases/download/v0.6.1/spin-operator.shim-executor.yaml
-#
-# Addition clkuster role for Gateway and HTTPRoute support
+# Addition cluster role for Gateway and HTTPRoute support
 #
 microk8s kubectl apply -f exdns-role-bindings.yaml
-#
-# Gateway API CRUDs
-#
-microk8s kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/experimental-install.yaml
-#
-# Update istio config to watch for Gateway API Alpha records (like TCPRoute)
-#
-sudo microk8s istioctl install -c /var/snap/microk8s/current/credentials/client.config install --set profile=demo -f pilot_k8s.yaml
 #
 # Create/Update namespace
 #
@@ -82,7 +83,7 @@ EOF
 microk8s helm repo add k8s_gateway https://k8s-gateway.github.io/k8s_gateway
 microk8s helm install exdns --namespace infrastructure \
   --set domain=k8s.koeppster.lan,service.type=LoadBalancer,service.loadBalancerIP=192.168.1.245 \
-  --set "resources={Ingress,Service,HTTPRoute,Gateway}"
+  --set "watchedResources={Ingress,Service,HTTPRoute,Gateway}" \
   k8s_gateway/k8s-gateway
 #
 # Create the docker images used
@@ -113,4 +114,8 @@ envsubst < aws-ecr-role-and-cron.yaml | kubectl apply -f -
 kubectl apply -f create-storage-class.yaml
 envsubst < create-cert-issuer.yaml | kubectl apply -f -
 envsubst < create-gateway-cert.yaml | kubectl apply -f -
+#
+# Patch to ensure fixed IP address for Envoy Gateway LoadBalancer
+#
+kubectl apply -f envoy-proxy-patch.yaml
 kubectl apply -f create-gateways.yaml

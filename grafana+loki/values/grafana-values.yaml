@@ -9,8 +9,7 @@ initChownData:
 podSecurityContext:
   runAsUser: 472
   runAsGroup: 472
-  fsGroup: 472
-  fsGroupChangePolicy: OnRootMismatch
+  runAsNonRoot: true
 containerSecurityContext:
   runAsUser: 472
   runAsGroup: 472
