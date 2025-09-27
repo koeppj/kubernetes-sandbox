@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    service: box-mcp-server
+  name: box-mcp-server
+  namespace: n8n
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: box-mcp-server
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        service: box-mcp-server
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - envFrom:
+          - secretRef:
+              name: box-mcp-server
+          image: 996472359368.dkr.ecr.us-east-1.amazonaws.com/mcp-server-box:latest
+          imagePullPolicy: IfNotPresent
+          name: box-mcp-server
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              memory: "250Mi"
+            limits:
+              memory: "500Mi"

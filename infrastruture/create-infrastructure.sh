@@ -111,7 +111,8 @@ kubectl label namespace --overwrite infrastructure koeppster.net\/aws_enabled=tr
 envsubst < create-aws-credentials.yaml | kubectl apply -f -
 envsubst < create-awsdns-updater.yaml | kubectl apply -f -
 envsubst < aws-ecr-role-and-cron.yaml | kubectl apply -f -
-kubectl apply -f create-storage-class.yaml
+envsubst < create-storage-class.yaml | kubectl apply -f -
+envsubst < postgres-storage-class.yaml | kubectl apply -f -
 envsubst < create-cert-issuer.yaml | kubectl apply -f -
 envsubst < create-gateway-cert.yaml | kubectl apply -f -
 #

@@ -18,19 +18,10 @@ spec:
         runAsUser: 10001
         runAsGroup: 10001
         fsGroup: 10001
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: local-registry
-                operator: In
-                values:
-                - "yes"
       containers:
         - name: collector
-          image: localhost:32000/boxevents:latest
-          imagePullPolicy: Always
+          image: 996472359368.dkr.ecr.us-east-1.amazonaws.com/boxevents:latest
+          imagePullPolicy: IfNotPresent
           resources:
             requests:
               cpu: "50m"

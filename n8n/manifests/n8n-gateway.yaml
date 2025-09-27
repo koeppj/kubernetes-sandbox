@@ -9,7 +9,7 @@ spec:
       namespace: infrastructure
       sectionName: https
       port: 443
-  hostnames: ["n8n.johnkoepp.com"]
+  hostnames: ["orchestration.johnkoepp.com"]
   rules:
     - matches:
       - path:
@@ -19,6 +19,9 @@ spec:
       - name: n8n
         namespace: n8n
         port: 5678
+      timeouts:
+        request: "900s"
+        backendRequest: "600s"
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -26,7 +29,7 @@ metadata:
   name: n8n-redirect
   namespace: n8n
   labels: 
-    koeppster.net/aws_common_name: n8n.johnkoepp.com
+    koeppster.net/aws_common_name: orchestration.johnkoepp.com
     koeppster.net/aws_status: waiting
 spec:
   parentRefs:
@@ -34,7 +37,7 @@ spec:
       namespace: infrastructure
       sectionName: http
       port: 80
-  hostnames: ["n8n.johnkoepp.com"]
+  hostnames: ["orchestration.johnkoepp.com"]
   rules:
     - filters:
         - type: RequestRedirect

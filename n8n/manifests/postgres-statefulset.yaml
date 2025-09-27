@@ -21,21 +21,28 @@ spec:
   - metadata:
       name: database-data
     spec:
-      storageClassName: kube-nfs
+      storageClassName: kube-postgres
       accessModes:
-      - ReadWriteMany
+      - ReadWriteOnce
       resources:
         requests:
-          storage: 2Gi
+          storage: 10Gi
   template:
     metadata:
       labels:
         app:  postgres-n8n
     spec:
       hostname: postgres-n8n
+      securityContext:
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
       containers:
       - name:  postgres-n8n
-        image:  postgres:11
+        image:  postgres:14
+        securityContext:
+          runAsUser: 999
+          runAsGroup: 999
+          runAsNonRoot: true
         resources:
           limits:
             cpu: 1000m
@@ -44,6 +51,8 @@ spec:
         - secretRef:
             name: postgres-secret
         env:
+          - name : PGDATA
+            value: /var/lib/postgresql/data
           - name: POSTGRES_DB
             value: n8n
           - name:   POSTGRES_HOST
@@ -55,7 +64,7 @@ spec:
           name:  database-port
         volumeMounts:
         - name: database-data
-          mountPath: /var/lib/postgresql
+          mountPath: /var/lib/postgresql/data
         - name: init-data
           mountPath: /docker-entrypoint-initdb.d/init-n8n-user.sh
           subPath: init-data.sh

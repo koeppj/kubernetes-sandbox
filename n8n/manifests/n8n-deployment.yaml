@@ -47,11 +47,13 @@ spec:
             - name: N8N_PORT
               value: "5678"
             - name: WEBHOOK_URL
-              value: https://n8n.johnkoepp.com/
+              value: https://orchestration.johnkoepp.com/
             - name: NBN_PROXY_HOPS
               value: "1"
             - name: N8N_EDITOR_BASE_URL
-              value: https://n8n.johnkoepp.com/
+              value: https://orchestration.johnkoepp.com/
+            - name: NODE_FUNCTION_ALLOW_BUILTIN
+              value: "*"
           image: n8nio/n8n
           name: n8n
           ports:

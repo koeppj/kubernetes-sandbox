@@ -15,8 +15,12 @@ export postgres_password_encoded=$(echo ${POSTGRES_PASSWORD} | tr -d '[:space:]'
 export postgres_db_encoded=$(echo ${POSTGRES_DB} | tr -d '[:space:]' | base64)
 export postgres_non_root_user_encoded=$(echo ${POSTGRES_NON_ROOT_USER} | tr -d '[:space:]' | base64)
 export postgres_non_root_password_encoded=$(echo ${POSTGRES_NON_ROOT_PASSWORD} | tr -d '[:space:]' | base64)
-
+export box_client_id_secret_encoded=$(echo ${BOX_CLIENT_ID} | tr -d '[:space:]' | base64)
+export box_client_secret_encoded=$(echo ${BOX_CLIENT_SECRET} | tr -d '[:space:]' | base64)
+export box_subject_type_encoded=$(echo ${BOX_SUBJECT_TYPE} | tr -d '[:space:]' | base64)
+export box_subject_id_encoded=$(echo ${BOX_SUBJECT_ID} | tr -d '[:space:]' | base64)
 export DOLLAR='$'
+
 envsubst < ${manifests_dir}/namespace.yaml | microk8s kubectl apply -f -
 envsubst < ${manifests_dir}/postgres-secret.yaml | microk8s kubectl apply -f -
 # DO NOT PRESUB UBST THE FOLLOWING, AS IT CONTAINS ENVIRONMENT VARIABLES TO BE SUBSTED AT RUNTIME
@@ -26,3 +30,6 @@ envsubst < ${manifests_dir}/n8n-persistent-volume-claim.yaml | microk8s kubectl 
 microk8s kubectl apply -f ${manifests_dir}/n8n-deployment.yaml
 microk8s kubectl apply -f ${manifests_dir}/n8n-service.yaml
 microk8s kubectl apply -f ${manifests_dir}/n8n-gateway.yaml
+envsubst < ${manifests_dir}/box-mxp-server-secret-.yaml | microk8s kubectl apply -f -
+microk8s kubectl apply -f ${manifests_dir}/box-mcp-server-deployment.yaml
+microk8s kubectl apply -f ${manifests_dir}/box-mcp-server-service.yaml

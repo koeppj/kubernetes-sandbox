@@ -1,0 +1,53 @@
+#
+# External Service and HTTPRoute for permit inbound internet (Webhook) traffic via Koeppster Kubernetes Sandbox
+#
+apiVersion: v1
+kind: Service
+metadata:
+  name: box-webhook-proxy
+  namespace: default
+spec:
+  clusterIP: None  # Makes this a headless service
+  ports:
+    - name: http
+      port: 9000
+      targetPort: 9000
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: box-webhook-proxy
+  namespace: default
+subsets:
+  - addresses:
+      - ip: 192.168.1.162  # Replace with the actual IP of ubuntu-mini.koeppster.lan
+    ports:
+      - port: 9000
+        name: http
+        
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: boxhook-route
+  namespace: default
+  labels:
+    koeppster.net/aws-common-name: "boxhook.johnkoepp.com"
+    koeppster.net/aws-status: "waiting"
+spec:
+  parentRefs:
+    - name: johnkoepp-com-gateway
+      namespace: infrastructure
+      sectionName: https
+      port: 443
+  hostnames: ["boxhook.johnkoepp.com"]
+  rules:
+    - matches:
+      - path:
+          type: PathPrefix
+          value: /
+      backendRefs:
+      - name: box-webhook-proxy
+        namespace: default
+        port: 9000
+

@@ -7,11 +7,20 @@ spec:
   provider:
     type: Kubernetes
     kubernetes:
+      envoyDeployment:
+        pod:
+          nodeSelector: { net: wired }
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchLabels: { app.kubernetes.io/name: envoy }
+                topologyKey: kubernetes.io/hostname    
       envoyService:
         patch:
           type: StrategicMerge
           value:
             spec:
               type: LoadBalancer
-              externalTrafficPolicy: Cluster   
+              externalTrafficPolicy: Local   
               loadBalancerIP: 192.168.1.246
