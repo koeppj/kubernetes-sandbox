@@ -27,7 +27,7 @@ microk8s enable community
 microk8s enable rbac
 microk8s enable cert-manager
 microk8s enable metallb:192.168.1.243-192.168.1.254
-// Patch metallb to only advertise on wired interfaces
+#  Patch metallb to only advertise on wired interfaces
 microk8s kubectl -n metallb-system patch l2advertisement default-advertise-all-pools \
   --type merge \
   -p '{
@@ -41,6 +41,15 @@ microk8s kubectl -n metallb-system patch l2advertisement default-advertise-all-p
       ]
     }
   }'
+# Patch to address denial issues on ARP requests - see https://chatgpt.com/share/68ed89cc-4738-800c-aa12-1174005ad05f
+microk8s kubectl -n metallb-system patch ds speaker --type='json' -p='[
+ {"op":"replace","path":"/spec/template/spec/containers/0/securityContext/allowPrivilegeEscalation","value":true},
+ {"op":"add","path":"/spec/template/spec/containers/0/securityContext/privileged","value":true},
+ {"op":"add","path":"/spec/template/spec/containers/0/securityContext/capabilities/add/-","value":"NET_ADMIN"},
+ {"op":"add","path":"/spec/template/spec/containers/0/securityContext/seccompProfile","value":{"type":"Unconfined"}},
+ {"op":"add","path":"/spec/template/metadata/annotations","value":{"container.apparmor.security.beta.kubernetes.io/speaker":"unconfined"}}
+]'
+microk8s kubectl -n metallb-system rollout restart ds/speaker
 
 microk8s enable registry
 microk8s enable metrics-server
