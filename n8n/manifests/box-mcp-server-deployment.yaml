@@ -27,7 +27,7 @@ spec:
           - secretRef:
               name: box-mcp-server
           image: 996472359368.dkr.ecr.us-east-1.amazonaws.com/mcp-server-box:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           name: box-mcp-server
           ports:
             - containerPort: 8000

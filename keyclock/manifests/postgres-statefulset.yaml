@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name:  postgres-keycloak
+  namespace: keycloak
+  labels:
+    app:  postgres-keycloak
+spec:
+  serviceName: postgres-keycloak
+  selector:
+    matchLabels:
+      app: postgres-keycloak
+  replicas: 1
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 25%
+    type: RollingUpdate
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Delete
+  volumeClaimTemplates:
+  - metadata:
+      name: database-data
+    spec:
+      storageClassName: kube-postgres
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+  template:
+    metadata:
+      labels:
+        app:  postgres-keycloak
+    spec:
+      hostname: postgres-keycloak
+      securityContext:
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+      - name:  postgres-keycloak
+        image:  postgres:18.1
+        securityContext:
+          runAsUser: 999
+          runAsGroup: 999
+          runAsNonRoot: true
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1000Mi
+        envFrom:
+        - secretRef:
+            name: postgres-secret
+        env:
+          - name : PGDATA
+            value: /var/lib/postgresql/data
+          - name: POSTGRES_DB
+            value: keycloak
+          - name:   POSTGRES_HOST
+            value: postgres-keycloak
+          - name: POSTGRES_PORT
+            value: '5432'
+          - name: POSTGRES_INITDB_ARGS
+            value: "--encoding=UTF8 --locale=en_US.utf8"            
+        ports:
+        - containerPort: 5432
+          name:  database-port
+        volumeMounts:
+        - name: database-data
+          mountPath: /var/lib/postgresql/data
+      restartPolicy: Always
+      volumes:
+      - name: init-data
+        configMap:
+          name: init-data
+          defaultMode: 0755
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-keycloak
+  namespace: keycloak
+spec:
+  selector:
+    app: postgres-keycloak
+  type: ClusterIP
+  ports:
+  - name: postgres
+    protocol: TCP
+    port: 5432
+    targetPort: database-port
