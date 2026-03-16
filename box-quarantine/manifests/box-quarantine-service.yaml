@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: box-quarantine-listener
+  namespace: box-enterprise-quarantine
+spec:
+  clusterIP: None
+  selector:
+    app: box-quarantine-listener
+  ports:
+    - name: statefulset
+      port: 80
+      targetPort: 80

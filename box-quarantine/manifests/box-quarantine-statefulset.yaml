@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: box-quarantine-listener
+  namespace: box-enterprise-quarantine
+spec:
+  serviceName: box-quarantine-listener
+  replicas: 1
+  selector:
+    matchLabels:
+      app: box-quarantine-listener
+  template:
+    metadata:
+      labels:
+        app: box-quarantine-listener
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: box-quarantine-listener
+          image: 996472359368.dkr.ecr.us-east-1.amazonaws.com/box-quarantine-container:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: BOX_AUTH_CONFIG
+              value: "${BOX_AUTH_CONFIG}"
+            - name: QUARANTINE_FOLDER_ID
+              value: "${QUARANTINE_FOLDER_ID}"
+            - name: QUARANTINE_TEMPLATE
+              value: "${QUARANTINE_TEMPLATE}"
+            - name: QUARANTINE_CLEARED_LABEL
+              value: "${QUARANTINE_CLEARED_LABEL}"
+            - name: QUARANTINE_LABEL
+              value: "${QUARANTINE_LABEL}"
+            - name: QUARANTINE_METADATA_TEMPLATE
+              value: "${QUARANTINE_METADATA_TEMPLATE}"
+            - name: COLLECTOR_CONFIG
+              value: "${COLLECTOR_CONFIG}"
+            - name: POLL_INTERVAL_SEC
+              value: "${POLL_INTERVAL_SEC}"
+            - name: EVENT_FETCH_LIMIT
+              value: "${EVENT_FETCH_LIMIT}"
+            - name: START_DATE
+              value: "${START_DATE}"
+            - name: ADMIN_LOGS_ONLY
+              value: "${ADMIN_LOGS_ONLY}"
+            - name: EVENT_CACHE_TTL_HOURS
+              value: "${EVENT_CACHE_TTL_HOURS}"
+            - name: EVENT_CACHE_MAX
+              value: "${EVENT_CACHE_MAX}"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: box-config
+              mountPath: /var/run/box
+              readOnly: true
+            - name: state
+              mountPath: "${COLLECTOR_CONFIG}"
+            - name: quarantine-template
+              mountPath: /etc/box-quarantine
+              readOnly: true
+      volumes:
+        - name: box-config
+          secret:
+            secretName: box-auth-config
+        - name: quarantine-template
+          configMap:
+            name: box-quarantine-template
+        - name: state
+          persistentVolumeClaim:
+            claimName: box-quarantine-state

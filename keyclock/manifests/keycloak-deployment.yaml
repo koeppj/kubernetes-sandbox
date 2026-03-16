@@ -13,6 +13,25 @@ spec:
       labels:
         app: keycloak
     spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: alpine/psql
+        command: ["sh", "-c"]
+        args:
+        - >
+          until PGPASSWORD="$POSTGRES_PASSWORD" pg_isready -h postgres-keycloak -p 5432 -U "$POSTGRES_USER" -d keycloak;
+          do echo "waiting for postgres"; sleep 2; done
+        env:
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
       containers:
       - name: keycloak
         image: quay.io/keycloak/keycloak:26.3.3
@@ -24,7 +43,24 @@ spec:
           containerPort: 7800
         - name: jgroups-fd
           containerPort: 57800
-
+        startupProbe:
+          httpGet:
+            path: /health/started
+            port: 9000
+          periodSeconds: 1
+          failureThreshold: 600              
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 9000
+          periodSeconds: 10
+          failureThreshold: 3              
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 9000
+          periodSeconds: 10
+          failureThreshold: 3              
         env:
         # JVM heap sizing (REQUIRED)
         - name: JAVA_OPTS_APPEND

@@ -1,0 +1,6 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: box-enterprise-quarantine
+  labels:
+    koeppster.net/aws_enabled: "true"
