@@ -2,8 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: box-quarantine-listener
-  namespace: box-enterprise-quarantine
-spec:
+  namespace: box
   serviceName: box-quarantine-listener
   replicas: 1
   selector:

@@ -2,7 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: box-quarantine-state
-  namespace: box-enterprise-quarantine
+  namespace: box
 spec:
   storageClassName: kube-nfs
   accessModes:

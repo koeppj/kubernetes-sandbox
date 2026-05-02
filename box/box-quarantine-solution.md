@@ -20,10 +20,10 @@ Located in [scripts](./scripts)
 
 | Script | Usage |
 |--------|-------|
-| `deploy.sh` | Create or update all component resources. |
-| `destroy.sh` | Remove the component from the cluster. |
-| `pause.sh` | Scale the StatefulSet down to `0`. |
-| `resume.sh` | Scale the StatefulSet back to `1`. |
+| `deploy-quarantine.sh` | Create or update all component resources. |
+| `destroy-quarantine.sh` | Remove the component from the cluster. |
+| `pause-quarantine.sh` | Scale the StatefulSet down to `0`. |
+| `resume-quarantine.sh` | Scale the StatefulSet back to `1`. |
 
 ## Secret for Box Auth Config
 

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: meshcentral-data
+  namespace: ${MESH_NAMESPACE}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ${MESH_STORAGE_CLASS}
+  resources:
+    requests:
+      storage: ${MESH_STORAGE_SIZE}

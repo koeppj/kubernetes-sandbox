@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: meshcentral
+  namespace: ${MESH_NAMESPACE}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: meshcentral
+  template:
+    metadata:
+      labels:
+        app: meshcentral
+    spec:
+      containers:
+        - name: meshcentral
+          image: ${MESH_IMAGE}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: CONFIG_FILE
+              value: /run/secrets/meshcentral/config.json
+          ports:
+            - name: https
+              containerPort: 4430
+          volumeMounts:
+            - name: meshcentral-data
+              mountPath: /opt/meshcentral/meshcentral-data
+            - name: meshcentral-config
+              mountPath: /run/secrets/meshcentral
+              readOnly: true
+      volumes:
+        - name: meshcentral-data
+          persistentVolumeClaim:
+            claimName: meshcentral-data
+        - name: meshcentral-config
+          secret:
+            secretName: meshcentral-config
