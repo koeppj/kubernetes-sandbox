@@ -1,0 +1,44 @@
+@startuml n8n
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title n8n Namespace - C4 Container View
+
+Person(user, "User", "Uses n8n at orchestration.johnkoepp.com.")
+Person(operator, "Operator", "Runs n8n/scripts/deploy-n8n.sh.")
+
+System_Boundary(cluster, "MicroK8s Cluster") {
+  Container_Boundary(ns, "namespace: n8n") {
+    Container(routeHttps, "n8n-route", "HTTPRoute", "HTTPS route attached to johnkoepp-com-gateway.")
+    Container(routeRedirect, "n8n-redirect", "HTTPRoute", "HTTP to HTTPS redirect and Route53 discovery labels.")
+    Container(n8n, "n8n", "Deployment: n8nio/n8n", "Workflow automation service.")
+    Container(mcp, "box-mcp-server", "Deployment: ECR mcp-server-box", "Box MCP integration service for workflows.")
+    ContainerDb(pg, "postgres-n8n", "StatefulSet: postgres:14", "Postgres database for n8n.")
+    ContainerDb(pgSecret, "postgres-secret", "Secret", "Postgres root and app credentials.")
+    ContainerDb(boxSecret, "box-mcp-server", "Secret", "Box MCP credentials.")
+    ContainerDb(n8nPvc, "n8n-pv-claim", "PVC: kube-nfs", "n8n home directory.")
+    ContainerDb(pgPvc, "database-data", "VolumeClaimTemplate: kube-postgres", "Postgres data.")
+  }
+
+  Container(publicGateway, "johnkoepp-com-gateway", "Gateway", "Public shared gateway in infrastructure namespace.")
+}
+
+System_Ext(route53, "AWS Route53", "DNS record for orchestration.johnkoepp.com.")
+System_Ext(nfs, "NFS Server", "Backs kube-nfs and kube-postgres storage.")
+
+Rel(user, routeHttps, "connects to", "HTTPS")
+Rel(routeHttps, publicGateway, "attaches to")
+Rel(routeRedirect, publicGateway, "attaches to")
+Rel(routeRedirect, route53, "is discovered by labels for")
+Rel(routeHttps, n8n, "forwards to", "Service n8n:5678")
+Rel(n8n, pg, "uses", "postgres")
+Rel(n8n, pgSecret, "reads")
+Rel(n8n, n8nPvc, "mounts")
+Rel(pg, pgSecret, "reads")
+Rel(pg, pgPvc, "mounts")
+Rel(mcp, boxSecret, "reads")
+Rel(n8nPvc, nfs, "is provisioned on")
+Rel(pgPvc, nfs, "is provisioned on")
+Rel(operator, n8n, "deploys via selective envsubst")
+Rel(operator, pg, "deploys via selective envsubst")
+
+@enduml

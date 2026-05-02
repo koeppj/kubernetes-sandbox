@@ -1,0 +1,35 @@
+@startuml default
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Default Namespace Examples - C4 Container View
+
+Person(operator, "Operator", "Applies ad hoc validation and example manifests.")
+Person(user, "User", "Calls example endpoints when enabled.")
+
+System_Boundary(cluster, "MicroK8s Cluster") {
+  Container_Boundary(ns, "namespace: default") {
+    Container(macvlan, "macvlan-conf", "NetworkAttachmentDefinition", "Multus macvlan example.")
+    Container(boxProxySvc, "box-webhook-proxy", "Service + Endpoints", "External endpoint proxy for Box webhook listener.")
+    Container(boxhookRoute, "boxhook-route", "HTTPRoute", "Public route to the webhook proxy.")
+    Container(testWorkloads, "test/* workloads", "Pods, Deployments, SpinApp, Routes", "Manual validation resources for HTTPRoute, TCPRoute, WASM, PVC, ECR, and networking.")
+  }
+
+  Container(publicGateway, "johnkoepp-com-gateway", "Gateway", "Public shared gateway.")
+  Container(lanGateway, "koeppster-lan-gateway", "Gateway", "LAN shared gateway.")
+}
+
+System_Ext(route53, "AWS Route53", "DNS for public examples when labels are recognized.")
+System_Ext(externalWebhook, "External Box webhook listener", "Endpoint behind box-webhook-proxy.")
+
+Rel(operator, testWorkloads, "applies manifests directly")
+Rel(operator, boxhookRoute, "applies manifests directly")
+Rel(user, boxhookRoute, "connects to", "HTTPS")
+Rel(boxhookRoute, publicGateway, "attaches to")
+Rel(boxhookRoute, boxProxySvc, "forwards to")
+Rel(boxProxySvc, externalWebhook, "proxies to")
+Rel(boxhookRoute, route53, "may be discovered by labels")
+Rel(testWorkloads, publicGateway, "can attach public test routes to")
+Rel(testWorkloads, lanGateway, "can attach LAN test routes to")
+Rel(testWorkloads, macvlan, "can validate")
+
+@enduml

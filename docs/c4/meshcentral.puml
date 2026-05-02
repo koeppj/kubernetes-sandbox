@@ -1,0 +1,34 @@
+@startuml meshcentral
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title MeshCentral Namespace - C4 Container View
+
+Person(user, "User", "Connects to the configured MeshCentral hostname.")
+Person(operator, "Operator", "Runs meshcentral/scripts/deploy.sh.")
+
+System_Boundary(cluster, "MicroK8s Cluster") {
+  Container_Boundary(ns, "namespace: ${MESH_NAMESPACE}") {
+    Container(routeHttps, "meshcentral-route", "HTTPRoute", "HTTPS route attached to johnkoepp-com-gateway.")
+    Container(routeRedirect, "meshcentral-redirect", "HTTPRoute", "HTTP to HTTPS redirect and Route53 discovery labels.")
+    Container(meshcentral, "meshcentral", "Deployment: ${MESH_IMAGE}", "MeshCentral server using file-based config.")
+    ContainerDb(configSecret, "meshcentral-config", "Secret from config.json", "MeshCentral runtime configuration.")
+    ContainerDb(dataPvc, "meshcentral-data", "PVC: ${MESH_STORAGE_CLASS}", "MeshCentral persistent data.")
+  }
+
+  Container(publicGateway, "johnkoepp-com-gateway", "Gateway", "Public shared gateway.")
+}
+
+System_Ext(route53, "AWS Route53", "DNS record for ${MESH_HOSTNAME}.")
+System_Ext(nfs, "NFS Server", "Usually backs kube-nfs storage.")
+
+Rel(user, routeHttps, "connects to", "HTTPS")
+Rel(routeHttps, publicGateway, "attaches to")
+Rel(routeRedirect, publicGateway, "attaches to")
+Rel(routeRedirect, route53, "is discovered by labels for")
+Rel(routeHttps, meshcentral, "forwards to", "Service meshcentral:${MESH_SERVICE_PORT}")
+Rel(meshcentral, configSecret, "reads")
+Rel(meshcentral, dataPvc, "mounts")
+Rel(dataPvc, nfs, "is provisioned on")
+Rel(operator, meshcentral, "deploys with envsubst and file secret")
+
+@enduml

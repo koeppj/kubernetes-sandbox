@@ -1,0 +1,35 @@
+@startuml jenkins
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Jenkins Namespace - C4 Container View
+
+Person(user, "User", "Uses Jenkins on the LAN.")
+Person(operator, "Operator", "Builds/applies Jenkins resources.")
+
+System_Boundary(cluster, "MicroK8s Cluster") {
+  Container_Boundary(ns, "namespace: jenkins") {
+    Container(routeLan, "jenkins-route", "HTTPRoute", "LAN route attached to koeppster-lan-gateway.")
+    Container(jenkins, "jenkins-deployment", "Deployment: jenkins/jenkins:lts", "Jenkins controller.")
+    Container(sa, "jenkins-admin", "ServiceAccount", "Identity used by Jenkins for pod operations.")
+    Container(rbac, "jenkins Role and RoleBinding", "RBAC", "Allows pod, pod exec/log, and secret reads in namespace.")
+    ContainerDb(adminToken, "jenkins-admin-secret", "ServiceAccount token Secret", "Token for jenkins-admin.")
+    ContainerDb(homePvc, "jenkins-pv-claim", "PVC: kube-nfs", "Jenkins home directory.")
+  }
+
+  Container(lanGateway, "koeppster-lan-gateway", "Gateway", "LAN shared gateway.")
+}
+
+System_Ext(nfs, "NFS Server", "Backs Jenkins home storage.")
+
+Rel(user, routeLan, "connects to", "HTTP on LAN")
+Rel(routeLan, lanGateway, "attaches to")
+Rel(routeLan, jenkins, "forwards to", "Service jenkins-service:8080")
+Rel(jenkins, sa, "runs as")
+Rel(sa, rbac, "is bound to")
+Rel(adminToken, sa, "belongs to")
+Rel(jenkins, homePvc, "mounts")
+Rel(homePvc, nfs, "is provisioned on")
+Rel(operator, jenkins, "applies manifests")
+Rel(operator, rbac, "applies manifests")
+
+@enduml

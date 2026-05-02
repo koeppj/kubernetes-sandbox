@@ -1,0 +1,40 @@
+@startuml box
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Box Namespace - C4 Container View
+
+Person(user, "User", "Calls the redaction service endpoint.")
+Person(operator, "Operator", "Runs Box deploy scripts.")
+
+System_Boundary(cluster, "MicroK8s Cluster") {
+  Container_Boundary(ns, "namespace: box") {
+    Container(routeHttps, "box-redaction-route", "HTTPRoute", "HTTPS route attached to johnkoepp-com-gateway.")
+    Container(routeRedirect, "box-redaction-redirect", "HTTPRoute", "HTTP to HTTPS redirect and Route53 discovery labels.")
+    Container(redaction, "box-redaction", "Deployment: ECR boxredact", "HTTP redaction service.")
+    Container(quarantine, "box-quarantine-listener", "StatefulSet: ECR box-quarantine-container", "Polls Box events and maintains quarantine state.")
+    ContainerDb(boxAuth, "box-auth-config", "Secret from file", "Box JWT auth config for quarantine listener.")
+    ContainerDb(template, "box-quarantine-template", "ConfigMap from file", "Quarantine message/template content.")
+    ContainerDb(statePvc, "box-quarantine-state", "PVC: kube-nfs", "Quarantine listener state.")
+  }
+
+  Container(publicGateway, "johnkoepp-com-gateway", "Gateway", "Public shared gateway.")
+}
+
+System_Ext(route53, "AWS Route53", "DNS record for boxredact.johnkoepp.com.")
+System_Ext(boxApi, "Box API", "Content, events, and metadata APIs.")
+System_Ext(nfs, "NFS Server", "Backs quarantine state.")
+
+Rel(user, routeHttps, "connects to", "HTTPS")
+Rel(routeHttps, publicGateway, "attaches to")
+Rel(routeRedirect, publicGateway, "attaches to")
+Rel(routeRedirect, route53, "is discovered by labels for")
+Rel(routeHttps, redaction, "forwards to", "Service box-redaction-service:80")
+Rel(quarantine, boxApi, "polls and updates")
+Rel(quarantine, boxAuth, "reads")
+Rel(quarantine, template, "reads")
+Rel(quarantine, statePvc, "mounts")
+Rel(statePvc, nfs, "is provisioned on")
+Rel(operator, quarantine, "deploys with deploy-quarantine.sh")
+Rel(operator, redaction, "deploys with deploy-redact.sh")
+
+@enduml

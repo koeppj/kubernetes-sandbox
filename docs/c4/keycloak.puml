@@ -1,0 +1,43 @@
+@startuml keycloak
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Keycloak Namespace - C4 Container View
+
+Person(user, "User", "Authenticates through idp.johnkoepp.com.")
+Person(operator, "Operator", "Runs keyclock/scripts/deploy.sh.")
+
+System_Boundary(cluster, "MicroK8s Cluster") {
+  Container_Boundary(ns, "namespace: keycloak") {
+    Container(routeHttps, "keycloak-route", "HTTPRoute", "HTTPS route attached to johnkoepp-com-gateway.")
+    Container(routeRedirect, "keycloak-redirect", "HTTPRoute", "HTTP to HTTPS redirect and Route53 discovery labels.")
+    Container(keycloak, "keycloak", "Deployment: quay.io/keycloak/keycloak:26.3.3", "Identity provider with proxy-aware forwarded headers.")
+    ContainerDb(pg, "postgres-keycloak", "StatefulSet: postgres:18.1", "Keycloak database.")
+    ContainerDb(keycloakSecret, "keycloak-secret", "Secret", "Bootstrap admin credentials.")
+    ContainerDb(pgSecret, "postgres-secret", "Secret", "Postgres credentials.")
+    ContainerDb(keycloakPvc, "keycloak-data", "PVC: kube-nfs", "Keycloak data directory.")
+    ContainerDb(pgPvc, "database-data", "VolumeClaimTemplate: kube-postgres", "Postgres data.")
+  }
+
+  Container(publicGateway, "johnkoepp-com-gateway", "Gateway", "Public shared gateway in infrastructure namespace.")
+}
+
+System_Ext(route53, "AWS Route53", "DNS record for idp.johnkoepp.com.")
+System_Ext(nfs, "NFS Server", "Backs kube-nfs and kube-postgres storage.")
+
+Rel(user, routeHttps, "connects to", "HTTPS")
+Rel(routeHttps, publicGateway, "attaches to")
+Rel(routeRedirect, publicGateway, "attaches to")
+Rel(routeRedirect, route53, "is discovered by labels for")
+Rel(routeHttps, keycloak, "forwards to", "Service keycloak:80")
+Rel(keycloak, pg, "uses", "postgres")
+Rel(keycloak, keycloakSecret, "reads")
+Rel(keycloak, pgSecret, "reads")
+Rel(keycloak, keycloakPvc, "mounts")
+Rel(pg, pgSecret, "reads")
+Rel(pg, pgPvc, "mounts")
+Rel(keycloakPvc, nfs, "is provisioned on")
+Rel(pgPvc, nfs, "is provisioned on")
+Rel(operator, keycloak, "deploys via selective envsubst")
+Rel(operator, pg, "deploys via selective envsubst")
+
+@enduml

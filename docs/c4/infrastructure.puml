@@ -1,0 +1,45 @@
+@startuml infrastructure
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Infrastructure Namespace - C4 Container View
+
+Person(operator, "Operator", "Runs MicroK8s, Helm, Docker, and deploy scripts.")
+
+System_Boundary(cluster, "MicroK8s Cluster") {
+  Container_Boundary(infra, "namespace: infrastructure") {
+    Container(gwPublic, "johnkoepp-com-gateway", "Gateway API Gateway", "Public HTTP/HTTPS entry point for *.johnkoepp.com.")
+    Container(gwLan, "koeppster-lan-gateway", "Gateway API Gateway", "LAN entry point for *.k8s.koeppster.lan.")
+    Container(awsdns, "awsdns", "Pod", "Watches labeled Certificates and HTTPRoutes and UPSERTs Route53 records.")
+    Container(ecrRefresh, "aws-ecr-secret-update", "CronJob", "Refreshes AWS ECR image pull credentials for labeled namespaces.")
+    Container(k8sGateway, "exdns", "Helm release", "Serves LAN DNS records from Gateway API resources.")
+    ContainerDb(awsCreds, "aws-credentials", "Secret", "AWS credentials consumed by automation.")
+  }
+
+  Container(certManager, "cert-manager", "MicroK8s addon", "Issues ACME certificates through ClusterIssuers.")
+  Container(envoy, "Envoy Gateway", "Helm release", "Gateway API implementation.")
+  Container(nfsCsi, "NFS CSI driver", "Helm release", "Dynamic NFS-backed volume provisioning.")
+  ContainerDb(kubeNfs, "kube-nfs / kube-postgres", "StorageClass", "Shared general and Postgres NFS storage classes.")
+  ContainerDb(gatewayCert, "johnkoepp-com-tls", "Certificate", "TLS certificate for public gateway listeners.")
+}
+
+System_Ext(route53, "AWS Route53", "Public DNS zone.")
+System_Ext(ecr, "AWS ECR", "Private container registry.")
+System_Ext(nfs, "NFS Server", "External NFS exports.")
+
+Rel(operator, gwPublic, "creates and configures through", "create-infrastructure.sh")
+Rel(operator, awsdns, "deploys through", "create-infrastructure.sh")
+Rel(operator, ecrRefresh, "deploys through", "create-infrastructure.sh")
+Rel(operator, envoy, "installs", "microk8s helm")
+Rel(operator, nfsCsi, "installs", "microk8s helm3")
+Rel(certManager, gatewayCert, "creates and renews")
+Rel(gatewayCert, gwPublic, "terminates HTTPS for")
+Rel(envoy, gwPublic, "implements")
+Rel(envoy, gwLan, "implements")
+Rel(awsdns, route53, "UPSERTs A records")
+Rel(ecrRefresh, ecr, "requests auth tokens")
+Rel(ecrRefresh, awsCreds, "reads")
+Rel(nfsCsi, nfs, "provisions volumes from")
+Rel(kubeNfs, nfsCsi, "uses")
+Rel(k8sGateway, gwLan, "discovers HTTPRoutes and Gateways")
+
+@enduml

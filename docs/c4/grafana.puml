@@ -1,0 +1,56 @@
+@startuml grafana
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Grafana Namespace - C4 Container View
+
+Person(user, "User", "Views dashboards and logs.")
+Person(operator, "Operator", "Runs grafana+loki/scripts/deploy.sh.")
+
+System_Boundary(cluster, "MicroK8s Cluster") {
+  Container_Boundary(ns, "namespace: grafana") {
+    Container(grafanaRouteLan, "grafana-route", "HTTPRoute", "LAN route for grafana.k8s.koeppster.lan.")
+    Container(grafanaRoutePublic, "grafana-public-route", "HTTPRoute", "Public HTTPS route for grafana.johnkoepp.com.")
+    Container(grafanaRedirect, "grafana-redirect", "HTTPRoute", "Public HTTP to HTTPS redirect and Route53 discovery labels.")
+    Container(lokiRoute, "loki-route", "HTTPRoute", "LAN route for loki.k8s.koeppster.lan.")
+    Container(grafana, "grafana", "Helm release: grafana/grafana", "Dashboard UI with Loki datasource.")
+    Container(loki, "loki", "Helm release: grafana/loki-stack", "Single binary log store.")
+    Container(collector, "box-event-collector", "Deployment: ECR boxevents", "Polls Box events and pushes logs to Loki.")
+    ContainerDb(boxJwt, "box-jwt", "Secret from file", "Box JWT config for event collection.")
+    ContainerDb(grafanaPvc, "grafana-pv-claim", "PVC: kube-grafana", "Grafana persistent data.")
+    ContainerDb(lokiPvc, "loki-pv-claim", "PVC: kube-nfs", "Loki filesystem storage.")
+    ContainerDb(collectorPvc, "box-collector-pv-claim", "PVC: kube-nfs", "Box collector cursor/config state.")
+  }
+
+  Container(publicGateway, "johnkoepp-com-gateway", "Gateway", "Public shared gateway.")
+  Container(lanGateway, "koeppster-lan-gateway", "Gateway", "LAN shared gateway.")
+}
+
+System_Ext(route53, "AWS Route53", "Public DNS for grafana.johnkoepp.com.")
+System_Ext(boxApi, "Box API", "Enterprise event source.")
+System_Ext(nfs, "NFS Server", "Backs Grafana, Loki, and collector PVCs.")
+
+Rel(user, grafanaRouteLan, "connects to", "HTTP on LAN")
+Rel(user, grafanaRoutePublic, "connects to", "HTTPS")
+Rel(grafanaRouteLan, lanGateway, "attaches to")
+Rel(lokiRoute, lanGateway, "attaches to")
+Rel(grafanaRoutePublic, publicGateway, "attaches to")
+Rel(grafanaRedirect, publicGateway, "attaches to")
+Rel(grafanaRedirect, route53, "is discovered by labels for")
+Rel(grafanaRouteLan, grafana, "forwards to", "Service grafana:80")
+Rel(grafanaRoutePublic, grafana, "forwards to", "Service grafana:80")
+Rel(lokiRoute, loki, "forwards to", "Service loki:3100")
+Rel(grafana, loki, "queries")
+Rel(collector, boxApi, "polls")
+Rel(collector, loki, "pushes logs to")
+Rel(collector, boxJwt, "reads")
+Rel(grafana, grafanaPvc, "mounts")
+Rel(loki, lokiPvc, "mounts")
+Rel(collector, collectorPvc, "mounts")
+Rel(grafanaPvc, nfs, "is provisioned on")
+Rel(lokiPvc, nfs, "is provisioned on")
+Rel(collectorPvc, nfs, "is provisioned on")
+Rel(operator, grafana, "deploys with Helm")
+Rel(operator, loki, "deploys with Helm")
+Rel(operator, collector, "deploys with manifests")
+
+@enduml
