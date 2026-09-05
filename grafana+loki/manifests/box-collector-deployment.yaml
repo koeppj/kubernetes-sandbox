@@ -38,7 +38,7 @@ spec:
               value: http://loki.grafana.svc.cluster.local:3100/loki/api/v1/push
             # one-time backfill if no saved position
             - name: BACKFILL_START_DATE
-              value: "2025-08-17T00:00:00Z"
+              value: ""
             # timing controls
             - name: POLL_INTERVAL_SEC
               value: "300"

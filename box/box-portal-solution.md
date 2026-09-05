@@ -1,0 +1,602 @@
+# Containerization & Kubernetes Deployment Reference
+
+This document is a self-contained reference for deploying this app's single
+combined container image to Kubernetes. It exists so an agent (or engineer)
+can go from "here's the repo" to "here's a running Deployment" without
+having to reverse-engineer the Dockerfile, `backend/src/config.ts`, and the
+example manifests by hand.
+
+The canonical, tested example manifests live in [`k8s/`](../k8s/) and the
+canonical build lives in the root [`Dockerfile`](../Dockerfile). This
+document explains *why* they're shaped the way they are and gives copy-paste
+starting points; if this doc and the files under `k8s/` ever disagree, the
+files under `k8s/` are correct (they're what's actually been built and run)
+and this doc is stale and should be updated to match.
+
+## 1. What the image is
+
+The root `Dockerfile` is a multi-stage build that produces **one image**
+containing both halves of this monorepo:
+
+- The Vue frontend (`frontend/`) is built to static assets.
+- The Express backend (`backend/`) is compiled to `backend/dist/src/`.
+- The runtime stage is Alpine Linux running **nginx** (serves the static
+  frontend and reverse-proxies `/api/*`) and **node** (the Express backend),
+  both supervised by `supervisord` (`docker/supervisord.conf`) inside one
+  container.
+
+```
+                 ┌─────────────── container ───────────────┐
+Client ── :8080 →│ nginx (docker/nginx.conf)                │
+                 │  ├─ /            → static SPA files      │
+                 │  ├─ /requests/*  → rewritten to index.html│
+                 │  └─ /api/*       → proxy to 127.0.0.1:3000│
+                 │                        ↓                  │
+                 │ node backend/dist/src/server.js  :3000    │ (not exposed
+                 └───────────────────────────────────────────┘  outside container)
+```
+
+Only port **8080** (nginx) needs to be reachable from outside the
+container/pod. Port 3000 (the Node backend) is only ever accessed by nginx
+over loopback and should not be published in a Kubernetes `Service`.
+
+### Non-root by default
+
+The image creates a system user in the Dockerfile (`app`, pinned to uid `101`
+and gid `102`) and runs everything — nginx, node, and supervisord — as that
+user (`USER app`). Nothing in the image or the manifests requires root, a
+privileged container, or `NET_BIND_SERVICE` (nginx listens on the
+unprivileged port 8080, not 80/443). The Kubernetes Deployment explicitly
+uses the same numeric identity and a read-only root filesystem:
+
+```yaml
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 101
+  runAsGroup: 102
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+  seccompProfile:
+    type: RuntimeDefault
+```
+
+`runAsNonRoot: true` prevents accidental root execution; the explicit
+`runAsUser`/`runAsGroup` also prevents the image's identity from changing
+silently if its base image changes. `runAsRoot: true` must not be used.
+
+The read-only root filesystem needs these writable `emptyDir` mounts in the
+Deployment:
+
+- `/tmp`, used by supervisord and nginx for PID/temp files.
+- `/tmp/nginx`, a dedicated nginx temp/PID directory nested within `/tmp`.
+- `/app/backend/cache/request-summary-templates`, used by the optional
+  Box-hosted request-summary template cache.
+
+The OIDC and Box JWT files remain read-only Secret mounts. The cache
+`emptyDir` is intentionally ephemeral; replace it with the PVC shown in §7
+when the Box-hosted template cache must survive pod restarts.
+
+This is also microk8s-compatible with no special handling required (see the
+addendum at the bottom of this doc).
+
+## 2. Building and pushing the image
+
+```bash
+docker build -t YOUR_REGISTRY/vue-box-portal-demo:TAG .
+docker push YOUR_REGISTRY/vue-box-portal-demo:TAG
+```
+
+The build accepts one build arg:
+
+| Build arg | Default | Purpose |
+|---|---|---|
+| `NODE_IMAGE` | `node:22-alpine` | Base image for both the build and runtime stages. |
+
+```bash
+docker build --build-arg NODE_IMAGE=node:22-alpine -t YOUR_REGISTRY/vue-box-portal-demo:TAG .
+```
+
+No other build-time configuration exists — all runtime behavior is
+controlled by environment variables and mounted files at container start,
+never at build time. **Secrets are never baked into the image.**
+`backend/config/` is empty in the built image; see §4.
+
+## 3. Runtime configuration model
+
+The backend (`backend/src/config.ts`) reads configuration from environment
+variables and, for a few larger JSON documents, from files on disk (whose
+*paths* are given by environment variables). Understanding this split is the
+key to mapping config onto Kubernetes objects correctly:
+
+| Config source | What it is | Where it comes from in this repo | Kubernetes object |
+|---|---|---|---|
+| Plain env vars | Flags, IDs, toggles | `backend/.env.sample` | `ConfigMap` (non-secret) or `Secret` (secret) |
+| `oidc.json` | OIDC client config, incl. `client_secret` | Generated by `npm run setup:oidc --workspace backend` | `Secret`, mounted as a file |
+| Box JWT config JSON | Box service-account credentials (private key) | Downloaded from the Box developer console | `Secret`, mounted as a file |
+| `box_config.json` | Box folder/group IDs, request-entity config, portal-user provisioning rules | `backend/config/box_config.json`, validated against `schemas/json-schema-box_config.json` | **Recommended:** not mounted — loaded directly from Box via `BOX_CONFIG_FILE_ID`. **Alternative:** `Secret`, mounted as a file, like `oidc.json`. Both shown in §6.1. |
+
+Two JSON documents (`oidc.json`, Box JWT config) *must* be mounted as files
+because the backend needs them before it can talk to Box or the IdP at all.
+`box_config.json` does not have that problem — Box credentials are already
+available by the time it's needed — so the recommended approach for
+container deployments is to fetch it from Box directly (`BOX_CONFIG_FILE_ID`)
+instead of also mounting it, avoiding a third Secret/ConfigMap to provision
+and keep in sync per cluster/environment. Mounting it as a Secret is also
+fully supported (§6.1 "Option B") for teams that would rather keep it as a
+static, diffable object alongside `oidc.json` in the same secrets pipeline.
+
+## 4. Complete environment variable reference
+
+All variables below come from `backend/src/config.ts` /
+`backend/.env.sample`. "K8s source" is the recommended object for a
+Kubernetes deployment.
+
+| Variable | Required? | Default | Purpose | K8s source |
+|---|---|---|---|---|
+| `PORT` | optional | `3000` | Backend listen port. Leave at 3000; only nginx (8080) is exposed. | ConfigMap (or omit) |
+| `FRONTEND_ORIGIN` | **required** | — | Public origin this app is served on. Used for CORS, OIDC redirects, cookies. Must match your Ingress/Service's external URL. | ConfigMap |
+| `SESSION_SECRET` | **required** | — | `express-session` cookie-signing secret, ≥16 chars. | **Secret** |
+| `BOX_FORM_DEBUG_ON` | optional | `false` | Enables a frontend debug overlay (auth identity, submitted payloads, Doc Gen diagnostics). Keep `false` in production. | ConfigMap |
+| `OIDC_CLAIMS_DEBUG_ON` | optional | `false` | Logs raw OIDC claims during login. Keep `false` in production. | ConfigMap |
+| `LOG_LEVEL` | optional | `info` | One of `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `silent`. | ConfigMap |
+| `LOG_DESTINATION` | optional | `stdout` | `stdout` or `file`. Use `stdout` in containers so your log collector (e.g. Fluent Bit) picks it up. | ConfigMap |
+| `LOG_FILE_PATH` | required only if `LOG_DESTINATION=file` | — | Not recommended in containers; use `stdout`. | — |
+| `OIDC_CONFIG_FILE` | optional | `config/oidc.json` (backend-relative) | Path to the mounted `oidc.json`. Set to the absolute in-container mount path. | env value pointing at a Secret volume mount |
+| `BOX_JWT_CONFIG_FILE_PATH` | one of the three Box-JWT options below is required | — | Path to the mounted Box JWT config JSON. Preferred over the other two. | env value pointing at a Secret volume mount |
+| `BOX_JWT_CONFIG_JSON` | alternative to `BOX_JWT_CONFIG_FILE_PATH` | — | The Box JWT config as a raw JSON string. Avoid in k8s — a mounted file (`BOX_JWT_CONFIG_FILE_PATH`) keeps the private key out of `kubectl describe pod`/env dumps. | — |
+| `BOX_CLIENT_ID`, `BOX_CLIENT_SECRET`, `BOX_APP_AUTH_PUBLIC_KEY_ID`, `BOX_APP_AUTH_PRIVATE_KEY`, `BOX_APP_AUTH_PASSPHRASE`, `BOX_ENTERPRISE_ID` | alternative to the above, all six required together | — | Per-field Box JWT credentials. Same caveat as `BOX_JWT_CONFIG_JSON` — avoid in k8s in favor of a mounted file. | — |
+| `BOX_CONFIG_FILE_ID` | **recommended for containers** (Option A, §6.1) | — | Box file ID of `box_config.json`; when set, the backend downloads and parses it from Box at startup instead of reading a local file. Takes precedence over `BOX_CONFIG_FILE_PATH`. | ConfigMap (it's a Box file ID, not a secret) |
+| `BOX_CONFIG_FILE_PATH` | alternative to `BOX_CONFIG_FILE_ID` (Option B, §6.1) | `config/box_config.json` (backend-relative) | Path to a mounted `box_config.json`, e.g. `/app/backend/config/box_config.json`. Use this instead of `BOX_CONFIG_FILE_ID` to mount `box_config.json` as a Secret, the same way `oidc.json` is mounted. | ConfigMap, set to the in-container mount path; the file itself comes from a `Secret` volume mount |
+| `REQUEST_TEMPLATE_CACHE_DIR` | optional | `cache/request-summary-templates` (backend-relative) | Durable cache directory for a **Box-hosted** request-summary template (`requestEntity.markdownTemplateFileId` in `box_config.json`). Unused when `box_config.json` uses `requestEntity.markdownTemplatePath` (a template baked into the image at `backend/templates/`). See §7. | ConfigMap |
+
+Box JWT source precedence: `BOX_JWT_CONFIG_FILE_PATH` → `BOX_JWT_CONFIG_JSON`
+→ the six per-field `BOX_*` env vars. Set exactly one of these three
+options; a mounted file (`BOX_JWT_CONFIG_FILE_PATH`) is the recommended
+approach for Kubernetes.
+
+## 5. `box_config.json` content and validation
+
+Whether loaded via `BOX_CONFIG_FILE_ID` (recommended) or a mounted
+`BOX_CONFIG_FILE_PATH`, the JSON document itself is identical and is
+validated against [`schemas/json-schema-box_config.json`](../schemas/json-schema-box_config.json)
+by `backend/src/config.ts`. Example (see `backend/config/box_config.json`
+for the checked-in reference copy):
+
+```json
+{
+  "formsDefFileId": "2135592843777",
+  "portalUserFolderId": "382346161673",
+  "documentTypeTaxonomyKey": "portalDocumentTypes",
+  "documentTypeTaxonomyCacheTtlSeconds": 300,
+  "docGenTemplatePreviewGroupId": "27674929739",
+  "requestEntity": {
+    "enabled": true,
+    "destinationFolderId": "366217050444",
+    "markdownTemplatePath": "templates/request-summary.md.hbs",
+    "boxWebBaseUrl": "https://app.box.com",
+    "metadataTemplateKey": "portalRequest",
+    "metadataDisplayName": "Portal Request",
+    "initialStatus": "Submitted"
+  },
+  "portalUserProvisioning": {
+    "enabled": true,
+    "external_app_user_id": { "template": "{{idToken.iss}}|{{idToken.sub}}", "required": true },
+    "create": {
+      "name": { "claim": "portalIdentity.name", "required": true, "maxLength": 50 }
+    },
+    "updateOnLogin": { "enabled": false, "fields": [] }
+  }
+}
+```
+
+Required top-level fields: `formsDefFileId`, `portalUserFolderId`,
+`docGenTemplatePreviewGroupId`, `portalUserProvisioning`. `requestEntity` is
+optional; when present, `requestEntity.enabled` must be `true`, and it needs
+exactly one of `markdownTemplatePath` or `markdownTemplateFileId` (see §7).
+`portalUserProvisioning.create` and `.updateOnLogin.fields` may not contain
+`email`, `login`, or `tracking_codes`.
+
+To use `BOX_CONFIG_FILE_ID` (Option A, recommended): upload this JSON as a
+file in Box (the platform app service account needs read access to it), note
+its Box file ID, and set `BOX_CONFIG_FILE_ID` to that ID in the `ConfigMap`.
+
+To use `BOX_CONFIG_FILE_PATH` (Option B): put this JSON directly into a
+`Secret` and mount it, the same way `oidc.json` is mounted — no Box upload
+needed. Both options are shown side by side in §6.1.
+
+## 6. Kubernetes objects needed
+
+This mirrors [`k8s/`](../k8s/) — treat that directory as the source of truth
+and this section as an explanation of it.
+
+| Object | Name (example manifests) | Contains |
+|---|---|---|
+| `ConfigMap` | `portal-config` | `FRONTEND_ORIGIN`, `BOX_CONFIG_FILE_ID` **or** `BOX_CONFIG_FILE_PATH` (§6.1), `BOX_FORM_DEBUG_ON`, `OIDC_CLAIMS_DEBUG_ON`, `LOG_LEVEL`, `LOG_DESTINATION`, `REQUEST_TEMPLATE_CACHE_DIR` |
+| `Secret` | `portal-app-secrets` | `SESSION_SECRET` |
+| `Secret` | `portal-oidc-config` | `oidc.json` (file) |
+| `Secret` | `portal-box-jwt-config` | Box JWT config JSON (file) |
+| `Secret` (optional) | `portal-box-config` | `box_config.json` (file) — only used with Option B (§6.1); not needed with the default `BOX_CONFIG_FILE_ID` |
+| `Deployment` | `portal` | The container; wires the above in via `envFrom`/`env`/`volumeMounts`; readiness/liveness probes against `GET /api/health` (§6.3) |
+| `Service` | `portal` | `ClusterIP`, port `8080` → container port `http` (8080) |
+| `PersistentVolumeClaim` (optional) | `portal-request-template-cache` | Only needed for a Box-hosted request-summary template; see §7. Not included in `k8s/` — cluster-specific. |
+
+### 6.1 ConfigMap
+
+`box_config.json` can reach the backend two ways (§3, §5); which one you use
+only changes the `ConfigMap` (and, for Option B, adds one `Secret` +
+`volumeMount`). Everything else in this document is identical either way.
+
+**Option A — `BOX_CONFIG_FILE_ID` (recommended; what `k8s/configmap.yaml`
+ships with by default).** The backend downloads and parses `box_config.json`
+from Box itself at startup. No `box_config.json` Secret/ConfigMap to
+provision or keep in sync — one fewer object per cluster/environment.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: portal-config
+data:
+  FRONTEND_ORIGIN: "https://portal.example.com"
+  BOX_CONFIG_FILE_ID: "123456789"
+  BOX_FORM_DEBUG_ON: "false"
+  OIDC_CLAIMS_DEBUG_ON: "false"
+  LOG_LEVEL: "info"
+  LOG_DESTINATION: "stdout"
+  # Only load-bearing if requestEntity.markdownTemplateFileId is used (§7);
+  # harmless to leave set otherwise.
+  REQUEST_TEMPLATE_CACHE_DIR: "/app/backend/cache/request-summary-templates"
+```
+
+**Option B — `BOX_CONFIG_FILE_PATH`, with `box_config.json` mounted as a
+`Secret`** (the same pattern used for `oidc.json`). Use this if you'd
+rather manage `box_config.json` as a static, diffable object in the same
+secrets pipeline as `oidc.json`/the Box JWT config, instead of a live Box
+download at every pod start.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: portal-config
+data:
+  FRONTEND_ORIGIN: "https://portal.example.com"
+  BOX_CONFIG_FILE_PATH: "/app/backend/config/box_config.json"
+  BOX_FORM_DEBUG_ON: "false"
+  OIDC_CLAIMS_DEBUG_ON: "false"
+  LOG_LEVEL: "info"
+  LOG_DESTINATION: "stdout"
+  REQUEST_TEMPLATE_CACHE_DIR: "/app/backend/cache/request-summary-templates"
+```
+
+Option B also needs a `portal-box-config` Secret (§6.2) and a matching
+`volumeMount`/`volume` on the Deployment (§6.3) — `k8s/deployment.yaml`
+already has both commented out, ready to enable; `k8s/configmap.yaml` has a
+comment marking where to make this swap.
+
+Pick one option — don't set both `BOX_CONFIG_FILE_ID` and
+`BOX_CONFIG_FILE_PATH`; `BOX_CONFIG_FILE_ID` silently takes precedence if
+both are present (per `initializeBoxBackendConfig` in `backend/src/config.ts`).
+
+### 6.2 Secrets
+
+Never commit real values. Generate these from your actual local
+files/values — don't hand-edit and `kubectl apply -f` a YAML file
+containing real secret material:
+
+```bash
+kubectl create secret generic portal-app-secrets \
+  --from-literal=SESSION_SECRET="$(openssl rand -hex 32)"
+
+kubectl create secret generic portal-oidc-config \
+  --from-file=oidc.json=backend/config/oidc.json
+
+kubectl create secret generic portal-box-jwt-config \
+  --from-file=box_jwt_config.json=/path/to/downloaded_box_jwt_config.json
+
+# Only needed for Option B (§6.1) -- skip this if using BOX_CONFIG_FILE_ID.
+kubectl create secret generic portal-box-config \
+  --from-file=box_config.json=backend/config/box_config.json
+```
+
+`oidc.json` is produced by `npm run setup:oidc --workspace backend` (see the
+root README's Quick Start). The Box JWT config JSON is downloaded from the
+Box developer console (app's Configuration tab → "Generate a Public/Private
+Keypair"). Templates with placeholder structure (do not apply as-is) are at
+`k8s/secret-app.example.yaml`, `k8s/secret-oidc.example.yaml`,
+`k8s/secret-box-jwt.example.yaml`, and (Option B only)
+`k8s/secret-box-config.example.yaml`.
+
+In a GitOps setup, replace the `kubectl create secret` step with whatever
+your cluster already uses (Sealed Secrets, External Secrets Operator, SOPS,
+Vault injector, etc.) — the Deployment only cares that Secrets with these
+three names and keys exist.
+
+### 6.3 Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: portal
+  labels:
+    app: portal
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: portal
+  template:
+    metadata:
+      labels:
+        app: portal
+    spec:
+      securityContext:
+        fsGroup: 102
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: portal
+          image: YOUR_REGISTRY/vue-box-portal-demo:TAG
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: portal-config
+          env:
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: portal-app-secrets
+                  key: SESSION_SECRET
+            - name: OIDC_CONFIG_FILE
+              value: /app/backend/config/oidc.json
+            - name: BOX_JWT_CONFIG_FILE_PATH
+              value: /app/backend/config/box_jwt_config.json
+          volumeMounts:
+            - name: oidc-config
+              mountPath: /app/backend/config/oidc.json
+              subPath: oidc.json
+              readOnly: true
+            - name: box-jwt-config
+              mountPath: /app/backend/config/box_jwt_config.json
+              subPath: box_jwt_config.json
+              readOnly: true
+            # Option B only (§6.1) -- uncomment along with the matching
+            # volume below and portal-box-config Secret (§6.2), and swap
+            # BOX_CONFIG_FILE_ID for BOX_CONFIG_FILE_PATH in the ConfigMap.
+            # - name: box-config
+            #   mountPath: /app/backend/config/box_config.json
+            #   subPath: box_config.json
+            #   readOnly: true
+            - name: request-template-cache
+              mountPath: /app/backend/cache/request-summary-templates
+            - name: tmp
+              mountPath: /tmp
+            - name: nginx-tmp
+              mountPath: /tmp/nginx
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 101
+            runAsGroup: 102
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: oidc-config
+          secret:
+            secretName: portal-oidc-config
+        - name: box-jwt-config
+          secret:
+            secretName: portal-box-jwt-config
+        - name: request-template-cache
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: nginx-tmp
+          emptyDir: {}
+        # Option B only (§6.1):
+        # - name: box-config
+        #   secret:
+        #     secretName: portal-box-config
+```
+
+Notes:
+- `k8s/deployment.yaml` ships with the Option B `box-config` volume mount
+  commented out. The request-summary-template-cache mount is enabled as an
+  `emptyDir` because it is required when the root filesystem is read-only;
+  replace its matching volume with the PVC from §7 for durable caching.
+- `subPath` mounts are used so each Secret contributes exactly one file
+  into `/app/backend/config/` without one volume mount hiding another (a
+  directory-level mount of the whole Secret would work too, but `subPath`
+  keeps each mount's provenance obvious).
+- `/api/health` (used by both probes) is a public, unauthenticated endpoint
+  (`GET /api/health` → `{ "ok": true }`) reached through nginx's `/api/`
+  proxy, so a passing probe confirms **both** nginx and the backend are up.
+  This is also what Kubernetes itself uses to decide pod/Deployment health:
+  `kubectl get pods` won't show `1/1 Ready` and `kubectl rollout status
+  deployment/portal` won't report the rollout complete until this probe
+  passes on the new pods. A pod stuck `Running` but not `Ready` almost
+  always means the backend failed to start — see §9.
+- **Sessions are in-memory** (`express-session`'s default `MemoryStore`).
+  With `replicas > 1`, a user's session only exists on the pod that created
+  it. Either put a sticky-session-aware Ingress/LoadBalancer in front, run a
+  single replica, or move to a shared session store before scaling out —
+  this repo does not currently implement a shared store.
+
+### 6.4 Service
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: portal
+spec:
+  selector:
+    app: portal
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  type: ClusterIP
+```
+
+Put an `Ingress` (or your cluster's equivalent) in front of this `Service`
+for external access and TLS termination; none is included here since
+ingress controllers and TLS setup are cluster-specific. Whatever public URL
+you configure **must** match `FRONTEND_ORIGIN` in the ConfigMap and
+`callback_url` in `oidc.json`.
+
+## 7. Local vs. Box-hosted request summary template
+
+`box_config.json`'s `requestEntity` needs exactly one of:
+
+| Field | Meaning | Container implication |
+|---|---|---|
+| `markdownTemplatePath` | A template file baked into the image at `backend/templates/` (e.g. `templates/request-summary.md.hbs`) | No extra volume needed — it's already in the image. This is what `backend/config/box_config.json` uses today. |
+| `markdownTemplateFileId` (+ optional `markdownTemplateCacheTtlSeconds`, default 300) | A Box file ID; the backend downloads it via the platform service account and caches it on disk at `REQUEST_TEMPLATE_CACHE_DIR` | Needs a **persistent, writable volume** mounted at that path so the cache survives pod restarts and isn't re-downloaded from cold on every start. |
+
+If you use `markdownTemplateFileId` and need the cache to survive pod
+restarts, replace the default `request-template-cache` `emptyDir` volume with
+a PVC:
+
+```yaml
+          volumeMounts:
+            # ...existing mounts...
+            - name: request-template-cache
+              mountPath: /app/backend/cache/request-summary-templates
+      volumes:
+        # ...existing volumes...
+        - name: request-template-cache
+          persistentVolumeClaim:
+            claimName: portal-request-template-cache
+```
+
+Replace the existing `request-template-cache` `emptyDir` volume and keep its
+existing mount path. With `replicas: 2` (the example default), an ordinary
+`ReadWriteOnce` PVC can't be mounted by pods on different nodes, so either:
+
+- back the `PersistentVolumeClaim` with a `ReadWriteMany`-capable
+  `StorageClass` so all replicas share one on-disk cache (concurrent
+  duplicate refresh checks across replicas are expected and harmless), or
+- switch to a workload design with per-pod storage, such as a
+  `StatefulSet` with `volumeClaimTemplates`, accepting that each replica
+  then maintains its own independent cache and TTL schedule.
+
+Skipping the volume entirely still works — each replica just re-downloads
+the template into its own ephemeral container filesystem after every
+restart. See [`backend/docs/local_template_config.md`](../backend/docs/local_template_config.md)
+for the full design and cache-refresh algorithm.
+
+## 8. Step-by-step deployment
+
+```bash
+# 1. Build and push the image
+docker build -t YOUR_REGISTRY/vue-box-portal-demo:TAG .
+docker push YOUR_REGISTRY/vue-box-portal-demo:TAG
+
+# 2. Create the three Secrets (see §6.2 for how each file/value is produced)
+kubectl create secret generic portal-app-secrets \
+  --from-literal=SESSION_SECRET="$(openssl rand -hex 32)"
+kubectl create secret generic portal-oidc-config \
+  --from-file=oidc.json=backend/config/oidc.json
+kubectl create secret generic portal-box-jwt-config \
+  --from-file=box_jwt_config.json=/path/to/downloaded_box_jwt_config.json
+
+# 3. Edit k8s/configmap.yaml: set FRONTEND_ORIGIN to your public URL and
+#    BOX_CONFIG_FILE_ID to the Box file ID of your box_config.json.
+#    (Option B instead: set BOX_CONFIG_FILE_PATH, create the
+#    portal-box-config Secret from box_config.json, and uncomment the
+#    box-config volume/mount in deployment.yaml -- see §6.1.)
+
+# 4. Edit k8s/deployment.yaml: set `image:` to the value pushed in step 1.
+#    (Uncomment the request-template-cache volume/mount from §7 first if
+#    requestEntity.markdownTemplateFileId is in use.)
+
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+
+# 5. Verify
+kubectl rollout status deployment/portal
+kubectl logs -l app=portal --tail=50
+kubectl port-forward svc/portal 8080:8080
+curl http://localhost:8080/api/health   # -> {"ok":true}
+```
+
+## 9. Troubleshooting: startup log signatures
+
+The backend logs structured JSON to stdout (see
+[`backend/docs/logging.md`](../backend/docs/logging.md)); `kubectl logs` on
+the pod shows both nginx's access/error lines and the backend's JSON log
+lines interleaved (supervisord forwards both to the container's stdout).
+Signatures observed while validating this setup:
+
+| Log line contains | Meaning | Fix |
+|---|---|---|
+| `Missing required environment variable: SESSION_SECRET` (or `FRONTEND_ORIGIN`) | Required env var not set | Check the `ConfigMap`/`Secret` is applied and referenced correctly in the Deployment |
+| `OIDC configuration file not found: /app/backend/config/oidc.json` | The `portal-oidc-config` Secret isn't mounted, or `OIDC_CONFIG_FILE` doesn't match the mount path | Check the `volumeMounts`/`volumes` block and `OIDC_CONFIG_FILE` env var |
+| `Box backend configuration file not found: ...` | Neither `BOX_CONFIG_FILE_ID` nor a mounted `BOX_CONFIG_FILE_PATH` resolved to a file | Option A: set `BOX_CONFIG_FILE_ID` in the ConfigMap to a valid Box file ID. Option B: check the `portal-box-config` Secret is mounted and `BOX_CONFIG_FILE_PATH` matches the mount path |
+| `error:1E08010C:DECODER routines::unsupported` (during `taxonomy.cache.refresh_failed` / `startup.failed`) | The Box JWT private key isn't a valid PEM (e.g. a placeholder value) | Verify `portal-box-jwt-config`'s `box_jwt_config.json` has the real downloaded Box JWT config, unmodified |
+| `startup.box_client.initialized` then `startup.box_backend_config.loaded` present, then it hangs or fails later | Config loading succeeded; failure is downstream (network/Box permissions) — read the next `event` field | Check Box app permissions/enterprise access for the configured service account |
+| nginx: `502` on `/api/*` requests, error log `connect() failed (111: Connection refused)... upstream: "http://127.0.0.1:3000..."` | The backend process isn't running (crashed/restarting) — nginx itself is healthy | Check `kubectl logs` for the backend's `startup.failed` event just before this |
+| nginx: `could not open error log file: ... Permission denied` | Only relevant if you've modified the image — the stock image chowns `/var/lib/nginx`, `/var/log/nginx`, `/run/nginx` to the `app` user in the Dockerfile | Don't remove that `chown` step if customizing the Dockerfile |
+
+A pod stuck `CrashLoopBackOff` almost always means `startup.failed` in the
+logs — that event's `message` field states exactly which configuration
+check failed (the backend validates all configuration synchronously at
+startup and refuses to listen on a partial/invalid config).
+
+## 10. Compatibility notes
+
+- **microk8s**: no special handling needed. microk8s does not enforce the
+  `restricted` Pod Security Standard by default, but this Deployment's
+  `securityContext` already satisfies it (non-root, no privilege
+  escalation, all capabilities dropped, no privileged/hostPath usage), so it
+  passes even if you later enable PSA enforcement. If you use the
+  `request-template-cache` PVC (§7) with `replicas: 2`, note that microk8s's
+  built-in `storage` addon only provides `ReadWriteOnce` — use the
+  `StatefulSet` alternative from §7, or a `ReadWriteMany`-capable
+  `StorageClass` if your microk8s cluster has one enabled (e.g. via NFS).
+- **Any standard Kubernetes distribution** (EKS, GKE, AKS, kubeadm, k3s,
+  etc.): the manifests use no cloud- or distro-specific APIs. Only the
+  `Ingress`/`StorageClass` you choose to layer on top will be
+  environment-specific.
+
+## 11. Related docs
+
+- [`k8s/README.md`](../k8s/README.md) — the example manifests themselves.
+- [`README.md` § Container Deployment](../README.md#container-deployment) —
+  Docker/Compose equivalents of this same configuration model.
+- [`docker-compose.yml`](../docker-compose.yml) — local single-host
+  equivalent, useful for testing configuration changes before touching a
+  cluster.
+- [`backend/docs/local_template_config.md`](../backend/docs/local_template_config.md)
+  — full design for the Box-hosted request-summary template cache (§7).
+- [`backend/.env.sample`](../backend/.env.sample) — canonical list of every
+  backend environment variable with inline comments.
+- [`schemas/json-schema-box_config.json`](../schemas/json-schema-box_config.json)
+  — JSON Schema for `box_config.json` (§5).

@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postfix
+  namespace: ${POSTFIX_NAMESPACE}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postfix
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postfix
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: postfix
+          image: ${POSTFIX_IMAGE}
+          imagePullPolicy: Always
+          ports:
+            - name: smtp
+              containerPort: 25
+              protocol: TCP
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -ec
+                - postfix status
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: smtp
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          volumeMounts:
+            - name: postfix-config
+              mountPath: /etc/postfix/main.cf
+              subPath: main.cf
+            - name: postfix-config
+              mountPath: /etc/postfix/recipient-map/virtual
+              subPath: virtual
+      volumes:
+        - name: postfix-config
+          configMap:
+            name: postfix-config

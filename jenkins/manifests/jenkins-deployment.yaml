@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jenkins-deployment
+  namespace: ${JENKINS_NAMESPACE}
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jenkins
+  template:
+    metadata:
+      labels:
+        app: jenkins
+    spec:
+      serviceAccountName: jenkins-admin
+      imagePullSecrets:
+        - name: aws-ecr-secret
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+      containers:
+        - name: jenkins
+          image: ${JENKINS_IMAGE}
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              memory: 2Gi
+              cpu: 1000m
+            requests:
+              memory: 500Mi
+              cpu: 500m
+          ports:
+            - name: httpport
+              containerPort: 8080
+            - name: jnlpport
+              containerPort: 50000
+          env:
+            - name: CASC_JENKINS_CONFIG
+              value: /var/jenkins_casc/jenkins.yaml
+            - name: JENKINS_NAMESPACE
+              value: ${JENKINS_NAMESPACE}
+            - name: JENKINS_HOSTNAME
+              value: ${JENKINS_HOSTNAME}
+            - name: JENKINS_WEBHOOK_HOSTNAME
+              value: ${JENKINS_WEBHOOK_HOSTNAME}
+            - name: JENKINS_HTTP_PORT
+              value: "${JENKINS_HTTP_PORT}"
+            - name: JENKINS_AGENT_PORT
+              value: "${JENKINS_AGENT_PORT}"
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: github-credentials
+                  key: GITHUB_TOKEN
+            - name: GITHUB_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: github-credentials
+                  key: GITHUB_WEBHOOK_SECRET
+          startupProbe:
+            httpGet:
+              path: /login
+              port: httpport
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /login
+              port: httpport
+            initialDelaySeconds: 90
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: httpport
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: jenkins-data
+              mountPath: /var/jenkins_home
+            - name: jenkins-casc
+              mountPath: /var/jenkins_casc
+              readOnly: true
+      volumes:
+        - name: jenkins-data
+          persistentVolumeClaim:
+            claimName: jenkins-pv-claim
+        - name: jenkins-casc
+          configMap:
+            name: jenkins-casc

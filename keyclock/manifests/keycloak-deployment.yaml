@@ -34,7 +34,7 @@ spec:
               key: POSTGRES_PASSWORD
       containers:
       - name: keycloak
-        image: quay.io/keycloak/keycloak:26.3.3
+        image: quay.io/keycloak/keycloak:26.7.3
         args: ["start"]
         ports:
         - containerPort: 8080
@@ -101,8 +101,6 @@ spec:
           value: idp.johnkoepp.com
         - name: KC_HOSTNAME_STRICT
           value: "false"
-        - name: KC_PROXY
-          value: edge
         - name: KC_PROXY_HEADERS
           value: xforwarded
         - name: KC_HTTP_ENABLED
@@ -113,6 +111,8 @@ spec:
           value: "true"
         - name: KC_HOSTNAME_STRICT_HTTPS
           value: "true"
+        - name: "KC_FEATURES"
+          value: "preview"
 
         resources:
           requests:

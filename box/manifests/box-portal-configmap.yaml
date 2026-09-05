@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: box-portal-config
+  namespace: box
+data:
+  FRONTEND_ORIGIN: "https://boxportal.johnkoepp.com"
+  BOX_CONFIG_FILE_PATH: "/app/backend/config/box_config.json"
+  BOX_FORM_DEBUG_ON: "false"
+  OIDC_CLAIMS_DEBUG_ON: "false"
+  LOG_LEVEL: "info"
+  LOG_DESTINATION: "stdout"
+  SESSION_STATE_PROVIDER: "memory"
+  BACKEND_REPLICA_COUNT: "1"
+  SESSION_IDLE_TIMEOUT_SECONDS: "1800"
+  SESSION_ABSOLUTE_LIFETIME_SECONDS: "43200"
+  BACKCHANNEL_LOGOUT_ENABLED: "true"
+  BACKCHANNEL_LOGOUT_ENDPOINT_PATH: "/api/auth/backchannel-logout"
+  BACKCHANNEL_LOGOUT_PUBLIC_ORIGIN: "https://boxportal.johnkoepp.com"
+  BACKCHANNEL_LOGOUT_MAX_TOKEN_AGE_SECONDS: "120"
+  BACKCHANNEL_LOGOUT_CLOCK_SKEW_SECONDS: "60"
+  BACKCHANNEL_LOGOUT_ALLOWED_ALGORITHMS: "RS256"
+

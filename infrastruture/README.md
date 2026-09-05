@@ -36,6 +36,20 @@ To create run environment the following script.
 # ./create-infrastructure.sh
 ```
 
+### On-demand AWS ECR refresh
+
+The AWS ECR updater normally runs on its CronJob schedule. To run it immediately
+and wait for the refresh to finish, execute:
+
+```bash
+./infrastruture/scripts/run-secrets-job.sh
+```
+
+The Job refreshes `aws-ecr-secret` and the `default` ServiceAccount in every
+namespace labeled `koeppster.net/aws_enabled=true`. The script prints the Job
+logs and exits nonzero if the refresh fails or does not complete within five
+minutes.
+
 ## Components
 
 The following files comprise the items used to create the `infrastructure` namespace and resoruces contained therein.
@@ -52,3 +66,4 @@ The following files comprise the items used to create the `infrastructure` names
 - [`create-records.sh`](./create-records.sh) - Shell script that does the work of UPSERTing AWS Route53 A records based on Certificates.  See [AWSDNS](./awsdns.Dockerfile) Dockerfile.
 - [`redeploy-awsdns-updater.sh`](./redeploy-awsdns-updater.sh) - Shell script to redeploy the AWS Route53 Updater stuff (for testing and if the public facing IP changes)
 - [`redeploy-awsecr-updater.sh`](./redeploy-awsecr-updater.sh) - Shell script to build/deploy the AWS ECR Token components.
+- [`scripts/run-secrets-job.sh`](./scripts/run-secrets-job.sh) - Runs the AWS ECR secret-update CronJob immediately and waits for completion.

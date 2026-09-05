@@ -115,6 +115,14 @@ When a proxied app needs forwarded-header handling, copy the Keycloak pattern ra
 - Namespaces that should receive AWS ECR credentials are labeled `koeppster.net/aws_enabled: "true"`.
 - Shared infrastructure objects live in the `infrastructure` namespace even though the directory is spelled `infrastruture/`.
 
+### On-demand AWS ECR pull-secret refresh
+
+- The shared updater is the `aws-ecr-secret-update` CronJob in the `infrastructure` namespace.
+- To run the refresh immediately, use `./infrastruture/scripts/run-secrets-job.sh` from the repository root.
+- The helper creates a uniquely named Job from the CronJob, waits up to five minutes for it to complete, prints its logs, and exits nonzero on failure.
+- The updater processes every namespace labeled `koeppster.net/aws_enabled="true"`; it recreates `aws-ecr-secret` and patches that namespace's `default` ServiceAccount with the pull secret.
+- When asked to refresh ECR pull secrets on demand, run this helper and then report the Job result and affected labeled namespaces. Do not run the full infrastructure setup or rebuild the ECR updater image for this operation.
+
 Preserve those labels and namespace boundaries when moving resources around.
 
 ## NFS Storage Class and PVC Standard

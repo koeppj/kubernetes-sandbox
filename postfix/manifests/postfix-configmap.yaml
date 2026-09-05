@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postfix-config
+  namespace: ${POSTFIX_NAMESPACE}
+data:
+  main.cf: |
+    compatibility_level = 3.6
+    myhostname = mail.sf.johnkoepp.com
+    mydomain = sf.johnkoepp.com
+    myorigin = ${DOLLAR}mydomain
+    inet_interfaces = all
+    inet_protocols = ipv4
+    mydestination = localhost
+    virtual_alias_domains = sf.johnkoepp.com
+    virtual_alias_maps = regexp:/etc/postfix/recipient-map/virtual
+    virtual_transport = smtp
+    relayhost =
+    smtp_helo_name = ${DOLLAR}myhostname
+    smtp_tls_security_level = may
+    smtp_tls_note_starttls_offer = no
+    smtp_tls_loglevel = 1
+    maillog_file = /dev/stdout
+    smtpd_tls_security_level = none
+    smtpd_use_tls = no
+    smtpd_tls_auth_only = no
+    smtpd_relay_restrictions = permit_mynetworks, reject_unauth_destination
+    smtpd_recipient_restrictions = reject_non_fqdn_recipient, reject_unknown_recipient_domain, reject_unlisted_recipient, permit_mynetworks, permit
+    smtpd_delay_reject = yes
+    smtpd_client_connection_count_limit = 20
+    smtpd_client_connection_rate_limit = 60
+    smtpd_client_message_rate_limit = 100
+    smtpd_error_sleep_time = 1s
+    smtpd_soft_error_limit = 5
+    smtpd_hard_error_limit = 10
+    message_size_limit = 26214400
+    mailbox_size_limit = 0
+    queue_run_delay = 300s
+    maximal_queue_lifetime = 2d
+    bounce_queue_lifetime = 1d
+    default_process_limit = 50
+  virtual: |
+    /^${POSTFIX_INCOMING_MAILBOX_REGEX}$/ ${POSTFIX_DESTINATION_MAILBOX}

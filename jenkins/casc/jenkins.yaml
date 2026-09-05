@@ -1,0 +1,211 @@
+jenkins:
+  numExecutors: 0
+  mode: EXCLUSIVE
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+  globalNodeProperties:
+    - envVars:
+        env:
+          - key: JENKINS_AGENT_SERVICE
+            value: "http://jenkins-service.${JENKINS_NAMESPACE}.svc.cluster.local:${JENKINS_HTTP_PORT}"
+  globalBuildDiscarder:
+    strategy:
+      logRotator:
+        daysToKeepStr: "30"
+        numToKeepStr: "20"
+        artifactDaysToKeepStr: "7"
+        artifactNumToKeepStr: "5"
+  quietPeriod: 5
+unclassified:
+  location:
+    url: "http://${JENKINS_HOSTNAME}/"
+  github:
+    hookUrl: "https://${JENKINS_WEBHOOK_HOSTNAME}/github-webhook/"
+    configs:
+      - credentialsId: "github-scm-token"
+        manageHooks: false
+    hookSecretConfigs:
+      - credentialsId: "github-webhook-secret"
+        signatureAlgorithm: "SHA256"
+  kubernetes:
+    clouds:
+      - kubernetes:
+          name: "kubernetes"
+          serverUrl: "https://kubernetes.default.svc"
+          namespace: "${JENKINS_NAMESPACE}"
+          jenkinsUrl: "http://jenkins-service.${JENKINS_NAMESPACE}.svc.cluster.local:${JENKINS_HTTP_PORT}"
+          jenkinsTunnel: "jenkins-service.${JENKINS_NAMESPACE}.svc.cluster.local:${JENKINS_AGENT_PORT}"
+          containerCapStr: "10"
+          maxRequestsPerHostStr: "32"
+          templates:
+            - name: "unprivileged-build-agent"
+              label: "jenkins-unprivileged"
+              serviceAccount: "jenkins-unprivileged"
+              idleMinutes: 0
+              instanceCapStr: "10"
+              yaml: |
+                apiVersion: v1
+                kind: Pod
+                spec:
+                  restartPolicy: Never
+                  securityContext:
+                    fsGroup: 1000
+                  volumes:
+                    - name: workspace-volume
+                      emptyDir: {}
+                    - name: buildkit-state
+                      emptyDir: {}
+                    - name: buildkit-socket
+                      emptyDir: {}
+                  containers:
+                    - name: tools
+                      image: "${JENKINS_TOOLS_IMAGE}"
+                      command: ["sh", "-c", "sleep 365d"]
+                      tty: true
+                      resources:
+                        requests:
+                          cpu: "250m"
+                          memory: "256Mi"
+                        limits:
+                          cpu: "1"
+                          memory: "1Gi"
+                      volumeMounts:
+                        - name: workspace-volume
+                          mountPath: /home/jenkins/agent
+                        - name: buildkit-socket
+                          mountPath: /run/user/1000/buildkit
+                    - name: buildkit
+                      image: moby/buildkit:v0.26.2-rootless
+                      args: ["--addr", "unix:///run/user/1000/buildkit/buildkitd.sock"]
+                      securityContext:
+                        seccompProfile:
+                          type: Unconfined
+                      resources:
+                        requests:
+                          cpu: "500m"
+                          memory: "512Mi"
+                        limits:
+                          cpu: "2"
+                          memory: "2Gi"
+                      volumeMounts:
+                        - name: workspace-volume
+                          mountPath: /home/jenkins/agent
+                        - name: buildkit-state
+                          mountPath: /home/user/.local/share/buildkit
+                        - name: buildkit-socket
+                          mountPath: /run/user/1000/buildkit
+            - name: "trusted-main-build-agent"
+              label: "jenkins-trusted-main"
+              serviceAccount: "jenkins-deployer"
+              idleMinutes: 0
+              instanceCapStr: "2"
+              yaml: |
+                apiVersion: v1
+                kind: Pod
+                metadata:
+                  labels:
+                    jenkins.koeppster.net/trusted-main: "true"
+                spec:
+                  restartPolicy: Never
+                  securityContext:
+                    fsGroup: 1000
+                  volumes:
+                    - name: workspace-volume
+                      emptyDir: {}
+                    - name: buildkit-state
+                      emptyDir: {}
+                    - name: buildkit-socket
+                      emptyDir: {}
+                  containers:
+                    - name: tools
+                      image: "${JENKINS_TOOLS_IMAGE}"
+                      command: ["sh", "-c", "sleep 365d"]
+                      tty: true
+                      envFrom:
+                        - secretRef:
+                            name: jenkins-aws-credentials
+                      env:
+                        - name: AWS_ACCOUNT_ID
+                          value: "${AWS_ACCOUNT_ID}"
+                        - name: JENKINS_N8N_ECR_REPOSITORY
+                          value: "${JENKINS_N8N_ECR_REPOSITORY}"
+                      resources:
+                        requests:
+                          cpu: "250m"
+                          memory: "256Mi"
+                        limits:
+                          cpu: "1"
+                          memory: "1Gi"
+                      volumeMounts:
+                        - name: workspace-volume
+                          mountPath: /home/jenkins/agent
+                        - name: buildkit-socket
+                          mountPath: /run/user/1000/buildkit
+                    - name: buildkit
+                      image: moby/buildkit:v0.26.2-rootless
+                      args: ["--addr", "unix:///run/user/1000/buildkit/buildkitd.sock"]
+                      securityContext:
+                        seccompProfile:
+                          type: Unconfined
+                      resources:
+                        requests:
+                          cpu: "500m"
+                          memory: "512Mi"
+                        limits:
+                          cpu: "2"
+                          memory: "2Gi"
+                      volumeMounts:
+                        - name: workspace-volume
+                          mountPath: /home/jenkins/agent
+                        - name: buildkit-state
+                          mountPath: /home/user/.local/share/buildkit
+                        - name: buildkit-socket
+                          mountPath: /run/user/1000/buildkit
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - string:
+              id: "github-scm-token"
+              description: "GitHub fine-grained token for Jenkins source access"
+              secret: "${GITHUB_TOKEN}"
+          - string:
+              id: "github-webhook-secret"
+              description: "GitHub webhook signature secret"
+              secret: "${GITHUB_WEBHOOK_SECRET}"
+jobs:
+  - script: |
+      multibranchPipelineJob('n8n') {
+        branchSources {
+          branchSource {
+            source {
+              github {
+                id('n8n-github-source')
+                repoOwner('${JENKINS_GITHUB_OWNER}')
+                repository('${JENKINS_GITHUB_REPOSITORY}')
+                credentialsId('github-scm-token')
+                configuredByUrl(false)
+                traits {
+                  gitHubBranchDiscovery {
+                    strategyId(3)
+                  }
+                  gitHubPullRequestDiscovery {
+                    strategyId(1)
+                  }
+                }
+              }
+            }
+          }
+        }
+        factory {
+          workflowBranchProjectFactory {
+            scriptPath('Jenkinsfile')
+          }
+        }
+        triggers {
+          periodicFolderTrigger {
+            interval('1h')
+          }
+        }
+      }

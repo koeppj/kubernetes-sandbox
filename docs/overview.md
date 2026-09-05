@@ -59,7 +59,7 @@ Public routes generally use an HTTPS `HTTPRoute` that forwards traffic and a pai
 | Grafana and Loki | `grafana` | `grafana+loki/scripts/deploy.sh` | Grafana Helm release, Loki Helm release, Box event collector, PVCs | `grafana.k8s.koeppster.lan`, `loki.k8s.koeppster.lan`, `grafana.johnkoepp.com` |
 | Box tools | `box` | `box/scripts/deploy-quarantine.sh`, `box/scripts/deploy-redact.sh` | Quarantine StatefulSet, redaction Deployment, PVC, file secrets | `boxredact.johnkoepp.com` |
 | MeshCentral | `${MESH_NAMESPACE}` from `.env`, sample `meshcentral` | `meshcentral/scripts/deploy.sh` | MeshCentral Deployment, PVC, file-based config Secret | `${MESH_HOSTNAME}` |
-| Jenkins | `jenkins` | `jenkins/build-jenkins.sh` and `jenkins/jenkins-resources.yaml` | Jenkins Deployment, ServiceAccount/RBAC, PVC | `jenkins.k8s.koeppster.lan` |
+| Jenkins | `jenkins` | `jenkins/scripts/deploy.sh` and `jenkins/manifests/` | Jenkins Deployment, ServiceAccount/RBAC, PVC | `jenkins.k8s.koeppster.lan` |
 | Default examples | `default` | direct manifest apply | macvlan, proxy endpoint examples, test workloads | `boxhook.johnkoepp.com` and ad hoc test routes |
 
 ## Storage Pattern
@@ -103,4 +103,3 @@ The C4 diagrams are stored as PlantUML source files:
 - [MeshCentral](./c4/meshcentral.puml)
 - [Jenkins](./c4/jenkins.puml)
 - [Default examples](./c4/default.puml)
-

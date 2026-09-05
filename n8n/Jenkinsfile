@@ -1,0 +1,64 @@
+pipeline {
+  agent none
+
+  options {
+    timeout(time: 20, unit: 'MINUTES')
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '5'))
+  }
+
+  stages {
+    stage('Test') {
+      agent { label 'jenkins-unprivileged' }
+      steps {
+        container('tools') {
+          sh 'git diff --check HEAD^ HEAD || test "$(git rev-list --count HEAD)" = 1'
+        }
+      }
+    }
+
+    stage('Build pull request image') {
+      agent { label 'jenkins-unprivileged' }
+      steps {
+        container('tools') {
+          sh '''#!/bin/sh
+            set -eu
+            buildctl --addr unix:///run/user/1000/buildkit/buildkitd.sock build \\
+              --frontend dockerfile.v0 \\
+              --local context=. \\
+              --local dockerfile=. \\
+              --output type=oci,dest=/tmp/n8n-image.tar
+          '''
+        }
+      }
+    }
+
+    stage('Push and deploy main') {
+      when { branch 'main' }
+      agent { label 'jenkins-trusted-main' }
+      steps {
+        container('tools') {
+          sh '''#!/bin/sh
+            set -eu
+            registry="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+            image="${registry}/${JENKINS_N8N_ECR_REPOSITORY}:${GIT_COMMIT}"
+            export DOCKER_CONFIG="$(mktemp -d /home/jenkins/agent/.docker.XXXXXX)"
+            trap 'rm -rf "${DOCKER_CONFIG}"' EXIT
+            token="$(aws ecr get-login-password --region "${AWS_DEFAULT_REGION}")"
+            auth="$(printf 'AWS:%s' "${token}" | base64 | tr -d '\\n')"
+            install -d -m 0700 "${DOCKER_CONFIG}"
+            printf '{"auths":{"%s":{"auth":"%s"}}}\n' "${registry}" "${auth}" > "${DOCKER_CONFIG}/config.json"
+            unset token auth
+            buildctl --addr unix:///run/user/1000/buildkit/buildkitd.sock build \\
+              --frontend dockerfile.v0 \\
+              --local context=. \\
+              --local dockerfile=. \\
+              --output type=image,name="${image}",push=true
+            kubectl -n n8n set image deployment/n8n n8n="${image}"
+            kubectl -n n8n rollout status deployment/n8n --timeout=3m
+          '''
+        }
+      }
+    }
+  }
+}

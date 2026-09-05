@@ -9,10 +9,10 @@ Person(operator, "Operator", "Builds/applies Jenkins resources.")
 System_Boundary(cluster, "MicroK8s Cluster") {
   Container_Boundary(ns, "namespace: jenkins") {
     Container(routeLan, "jenkins-route", "HTTPRoute", "LAN route attached to koeppster-lan-gateway.")
-    Container(jenkins, "jenkins-deployment", "Deployment: jenkins/jenkins:lts", "Jenkins controller.")
+    Container(jenkins, "jenkins-deployment", "Deployment: ECR jenkins-controller:<version>", "Jenkins controller.")
     Container(sa, "jenkins-admin", "ServiceAccount", "Identity used by Jenkins for pod operations.")
-    Container(rbac, "jenkins Role and RoleBinding", "RBAC", "Allows pod, pod exec/log, and secret reads in namespace.")
-    ContainerDb(adminToken, "jenkins-admin-secret", "ServiceAccount token Secret", "Token for jenkins-admin.")
+    Container(rbac, "jenkins Role and RoleBinding", "RBAC", "Allows pod, pod exec, and pod-log operations in namespace.")
+    ContainerDb(awsCredentials, "jenkins-aws-credentials", "Secret", "Scoped ECR push credentials for trusted build agents.")
     ContainerDb(homePvc, "jenkins-pv-claim", "PVC: kube-nfs", "Jenkins home directory.")
   }
 
@@ -26,7 +26,7 @@ Rel(routeLan, lanGateway, "attaches to")
 Rel(routeLan, jenkins, "forwards to", "Service jenkins-service:8080")
 Rel(jenkins, sa, "runs as")
 Rel(sa, rbac, "is bound to")
-Rel(adminToken, sa, "belongs to")
+Rel(awsCredentials, jenkins, "is mounted only into trusted build agents")
 Rel(jenkins, homePvc, "mounts")
 Rel(homePvc, nfs, "is provisioned on")
 Rel(operator, jenkins, "applies manifests")

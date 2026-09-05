@@ -1,0 +1,8 @@
+configuration-as-code:2117.vc05a_0b_e6b_f4e
+credentials-binding:728.v902a_273b_8947
+github:1.47.0
+github-branch-source:1983.vfa_27ed961853
+job-dsl:1.93
+kubernetes:4547.v52f3080db_8cd
+kubernetes-cli:1.375.v8001982544ba
+workflow-aggregator:608.v67378e9d3db_1

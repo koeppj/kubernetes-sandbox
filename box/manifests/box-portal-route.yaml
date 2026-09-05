@@ -1,0 +1,43 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: box-portal-route
+  namespace: box
+spec:
+  parentRefs:
+    - name: johnkoepp-com-gateway
+      namespace: infrastructure
+      sectionName: https
+      port: 443
+  hostnames: ["boxportal.johnkoepp.com"]
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: box-portal
+          namespace: box
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: box-portal-redirect
+  namespace: box
+  labels:
+    koeppster.net/aws_common_name: boxportal.johnkoepp.com
+    koeppster.net/aws_status: waiting
+spec:
+  parentRefs:
+    - name: johnkoepp-com-gateway
+      namespace: infrastructure
+      sectionName: http
+      port: 80
+  hostnames: ["boxportal.johnkoepp.com"]
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301

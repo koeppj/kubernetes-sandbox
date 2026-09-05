@@ -36,7 +36,8 @@ Notes:
 ### Automated Refresh of AWS ECR Access Tokens.
 
 Notes
-- Scoped to namespaces with the label `koeppster.net/aws_enables=true`
+- Scoped to namespaces with the label `koeppster.net/aws_enabled=true`.
+- Run an immediate refresh with `./infrastruture/scripts/run-secrets-job.sh`; the script waits for completion and reports the updater logs.
 
 ### Automated Generation of AWS Route33 A Records
 

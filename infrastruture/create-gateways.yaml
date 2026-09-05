@@ -67,6 +67,12 @@ spec:
         certificateRefs:
           - name: johnkoepp-com-tls
             namespace: infrastructure
+    - name: smtp
+      port: 25
+      protocol: TCP
+      allowedRoutes:
+        namespaces:
+          from: All
   addresses:
     - type: IPAddress
       value: 192.168.1.246

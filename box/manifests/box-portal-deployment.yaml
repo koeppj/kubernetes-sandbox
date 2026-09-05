@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: box-portal
+  namespace: box
+  labels:
+    app: box-portal
+spec:
+  # The application uses an in-memory session store, so this must remain one
+  # replica until it is changed to use a shared session store.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: box-portal
+  template:
+    metadata:
+      labels:
+        app: box-portal
+    spec:
+      securityContext:
+        fsGroup: 102
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: box-portal
+          image: 996472359368.dkr.ecr.us-east-1.amazonaws.com/vue-box-portal-demo:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: box-portal-config
+          env:
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: box-portal-app-secrets
+                  key: SESSION_SECRET
+            - name: OIDC_CONFIG_FILE
+              value: /app/backend/config/oidc.json
+            - name: BOX_JWT_CONFIG_FILE_PATH
+              value: /app/backend/config/box_jwt_config.json
+          volumeMounts:
+            - name: oidc-config
+              mountPath: /app/backend/config/oidc.json
+              subPath: oidc.json
+              readOnly: true
+            - name: box-jwt-config
+              mountPath: /app/backend/config/box_jwt_config.json
+              subPath: box_jwt_config.json
+              readOnly: true
+            - name: box-config
+              mountPath: /app/backend/config/box_config.json
+              subPath: box_config.json
+              readOnly: true
+            - name: request-template-cache
+              mountPath: /app/backend/cache/request-summary-templates
+            - name: tmp
+              mountPath: /tmp
+            - name: nginx-tmp
+              mountPath: /tmp/nginx
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 101
+            runAsGroup: 102
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 300
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: oidc-config
+          secret:
+            secretName: box-portal-oidc-config
+        - name: box-jwt-config
+          secret:
+            secretName: box-portal-jwt-config
+        - name: box-config
+          secret:
+            secretName: box-portal-config-file
+        - name: request-template-cache
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: nginx-tmp
+          emptyDir: {}

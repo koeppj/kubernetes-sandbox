@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins-service
+  namespace: ${JENKINS_NAMESPACE}
+spec:
+  type: ClusterIP
+  selector:
+    app: jenkins
+  ports:
+    - name: jenkins-service
+      protocol: TCP
+      port: ${JENKINS_HTTP_PORT}
+      targetPort: httpport
+    - name: jnlpport
+      protocol: TCP
+      port: ${JENKINS_AGENT_PORT}
+      targetPort: jnlpport
