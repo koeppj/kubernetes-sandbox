@@ -8,8 +8,8 @@ spec:
   restartPolicy: Never
   containers:
   - name: test-awser-pod
-    image: localhost:32000/awsecr
-    imagePullPolicy: Always
+    image: awsecr:1.0.0
+    imagePullPolicy: Never
     command: ["/bin/ash","-c","trap : TERM INT; sleep infinity & wait"]
     envFrom:
       - secretRef:

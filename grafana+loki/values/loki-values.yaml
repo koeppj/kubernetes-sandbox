@@ -23,13 +23,13 @@ loki:
     filesystem:
       directory: /var/loki           
 
+  persistence:
+    enabled: true
+    existingClaim: loki-pv-claim
+
   compactor:
     working_directory: /var/loki/compactor
     delete_request_cancel_period: 24h
 
   limits_config:
     retention_period: 672h           
-
-persistence:
-  enabled: true
-  existingClaim: loki-pv-claim

@@ -162,6 +162,14 @@ When adding a new NFS-backed workload:
    - `ReadWriteOnce` for most single-pod stateful services
    - `ReadWriteMany` only when the workload actually benefits from shared write access
 
+### NFS maintenance shutdown and restore
+
+- Run `./bin/shutdown-nfs-workloads.sh` before restarting or patching the backing NFS server. It discovers live Deployments and StatefulSets that mount PVCs provisioned by an NFS StorageClass, records their current replica counts, stops Deployments before StatefulSets, and waits for graceful termination.
+- Run `./bin/restore-nfs-workloads.sh` after NFS is healthy. It restores the recorded counts, starting StatefulSets before Deployments, and removes its state file only after a successful restore.
+- Use each script's `--dry-run` mode when reviewing the maintenance target set. The live pod template is authoritative: a PVC existing in a namespace does not by itself mean a workload currently mounts it.
+- Every new stack, and every workload-spec or Helm-values change that adds, removes, or renames a Deployment, StatefulSet, PVC, or NFS StorageClass, must be checked against both maintenance scripts. Run the shutdown dry run against the deployed result and update the scripts and this documentation if the new pattern is not discovered correctly.
+- The scripts cover Deployments and StatefulSets only. Maintenance operators must separately confirm that no one-off Job or unmanaged Pod is using NFS before taking the server offline.
+
 Do not add hostPath storage for app data unless the task explicitly calls for a local-only exception.
 
 ## Helm Usage

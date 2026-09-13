@@ -1,25 +1,26 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name:  postgres-n8n
+  name: postgres-n8n-v17
   namespace: n8n
   labels:
-    app:  postgres-n8n
+    app: postgres-n8n-v17
 spec:
-  serviceName: postgres-n8n
+  serviceName: postgres-n8n-v17
   selector:
     matchLabels:
-      app: postgres-n8n
+      app: postgres-n8n-v17
   replicas: 1
   updateStrategy:
     rollingUpdate:
       maxUnavailable: 25%
     type: RollingUpdate
   persistentVolumeClaimRetentionPolicy:
-    whenDeleted: Delete
+    whenDeleted: Retain
+    whenScaled: Retain
   volumeClaimTemplates:
   - metadata:
-      name: database-data
+      name: database-data-v17
     spec:
       storageClassName: kube-postgres
       accessModes:
@@ -30,20 +31,24 @@ spec:
   template:
     metadata:
       labels:
-        app:  postgres-n8n
+        app: postgres-n8n-v17
     spec:
-      hostname: postgres-n8n
+      hostname: postgres-n8n-v17
       securityContext:
         fsGroup: 999
         fsGroupChangePolicy: OnRootMismatch
       containers:
-      - name:  postgres-n8n
-        image:  postgres:14
+      - name: postgres-n8n
+        image: postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
+        imagePullPolicy: IfNotPresent
         securityContext:
           runAsUser: 999
           runAsGroup: 999
           runAsNonRoot: true
         resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
           limits:
             cpu: 1000m
             memory: 1000Mi
@@ -52,18 +57,45 @@ spec:
             name: postgres-secret
         env:
           - name : PGDATA
-            value: /var/lib/postgresql/data
+            value: /var/lib/postgresql/data/pgdata
           - name: POSTGRES_DB
             value: n8n
           - name:   POSTGRES_HOST
-            value: postgres-n8n
+            value: postgres-n8n-v17
           - name: POSTGRES_PORT
             value: '5432'
         ports:
         - containerPort: 5432
           name:  database-port
+        readinessProbe:
+          exec:
+            command:
+              - /bin/sh
+              - -ec
+              - psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --tuples-only --command='SELECT 1'
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 12
+        startupProbe:
+          exec:
+            command:
+              - /bin/sh
+              - -ec
+              - psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --tuples-only --command='SELECT 1'
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 120
+        livenessProbe:
+          exec:
+            command:
+              - /bin/sh
+              - -ec
+              - pg_isready --username="$POSTGRES_USER" --dbname=postgres
+          periodSeconds: 15
+          timeoutSeconds: 3
+          failureThreshold: 4
         volumeMounts:
-        - name: database-data
+        - name: database-data-v17
           mountPath: /var/lib/postgresql/data
         - name: init-data
           mountPath: /docker-entrypoint-initdb.d/init-n8n-user.sh
@@ -79,11 +111,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: postgres-n8n
+  name: postgres-n8n-v17
   namespace: n8n
 spec:
   selector:
-    app: postgres-n8n
+    app: postgres-n8n-v17
   type: ClusterIP
   ports:
   - name: postgres

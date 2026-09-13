@@ -21,7 +21,7 @@ kind: ClusterRoleBinding
 metadata:
   name: get-certificates-role-binding
 roleRef:
-  apiGroup: ""
+  apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: get-certificates-cluster-role
 subjects:
@@ -29,33 +29,35 @@ subjects:
   name: aws-route53-update-service-account
   namespace: infrastructure
 ---
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: "awsdns"
   namespace: infrastructure
   labels:
     app: "awsdns"
 spec:
-  serviceAccountName: aws-route53-update-service-account
-  containers:
-  - name: awsdns
-    image: localhost:32000/awsdns
-    imagePullPolicy: Always
-    env:
-      - name: RUN_INTERVAL
-        value: "30"
-      - name: KUBE_HOST_IP
-        value: "${kube_host_ip}"
-    envFrom:
-      - secretRef:
-          name: aws-credentials
-  affinity:
-    nodeAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        nodeSelectorTerms:
-        - matchExpressions:
-          - key: local-registry
-            operator: In
-            values:
-            - "yes"
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: awsdns
+  template:
+    metadata:
+      labels:
+        app: awsdns
+    spec:
+      serviceAccountName: aws-route53-update-service-account
+      containers:
+      - name: awsdns
+        image: awsdns:1.0.0
+        imagePullPolicy: Never
+        env:
+          - name: RUN_INTERVAL
+            value: "30"
+          - name: KUBE_HOST_IP
+            value: "${kube_host_ip}"
+        envFrom:
+          - secretRef:
+              name: aws-credentials

@@ -24,7 +24,7 @@ kind: ClusterRoleBinding
 metadata:
   name: role-aws-authorization-binding
 roleRef:
-  apiGroup: ""
+  apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: aws-authorization-cluster-role
 subjects:
@@ -50,17 +50,8 @@ spec:
           restartPolicy: Never
           containers:
           - name: aws-ecr-secret-update
-            image: localhost:32000/awsecr
-            imagePullPolicy: Always
+            image: awsecr:1.0.0
+            imagePullPolicy: Never
             envFrom:
               - secretRef:
                   name: aws-credentials
-          affinity:
-            nodeAffinity:
-              requiredDuringSchedulingIgnoredDuringExecution:
-                nodeSelectorTerms:
-                - matchExpressions:
-                  - key: local-registry
-                    operator: In
-                    values:
-                    - "yes"

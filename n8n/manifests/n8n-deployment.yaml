@@ -17,17 +17,21 @@ spec:
       labels:
         service: n8n
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - command:
-            - /bin/sh
+            - n8n
           args:
-            - -c
-            - sleep 5; n8n start
+            - start
           env:
             - name: DB_TYPE
               value: postgresdb
             - name: DB_POSTGRESDB_HOST
-              value: postgres-n8n
+              value: postgres-n8n-v17
             - name: DB_POSTGRESDB_PORT
               value: "5432"
             - name: DB_POSTGRESDB_DATABASE
@@ -46,31 +50,63 @@ spec:
               value: http
             - name: N8N_PORT
               value: "5678"
-            - name: WEBHOOK_URL
+            - name: N8N_WEBHOOK_URL
               value: https://orchestration.johnkoepp.com/
-            - name: NBN_PROXY_HOPS
+            - name: N8N_PROXY_HOPS
               value: "1"
             - name: N8N_EDITOR_BASE_URL
               value: https://orchestration.johnkoepp.com/
             - name: NODE_FUNCTION_ALLOW_BUILTIN
               value: "*"
-          image: n8nio/n8n
+            - name: NODE_OPTIONS
+              value: --max-old-space-size=1536
+            - name: N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS
+              value: "true"
+            - name: N8N_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: n8n-secret
+                  key: N8N_ENCRYPTION_KEY
+          image: n8nio/n8n:2.37.10@sha256:307d6065be25619aa24cfc63a7c2f04ca56d084a08c05c8e9f189a89f353b1ec
+          imagePullPolicy: IfNotPresent
           name: n8n
           ports:
             - containerPort: 5678
+              name: http
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            failureThreshold: 60
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /healthz/readiness
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
           resources:
             requests:
-              memory: "250Mi"
+              cpu: "250m"
+              memory: "1Gi"
             limits:
-              memory: "500Mi"
+              cpu: "1"
+              memory: "2Gi"
           volumeMounts:
             - mountPath: /home/node/.n8n
               name: n8n-pv-claim
       restartPolicy: Always
+      terminationGracePeriodSeconds: 60
       volumes:
         - name: n8n-pv-claim
           persistentVolumeClaim:
             claimName: n8n-pv-claim
-        - name: postgres-secret
-          secret:
-            secretName: postgres-secret

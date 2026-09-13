@@ -47,6 +47,44 @@ Creates A records for Certificate and HTTPRoute resources.
 
 ### Using k8s_gateway to connect to local lab DNS server
 
+### NFS server maintenance
+
+Before restarting or patching the backing NFS server, stop every running
+Deployment and StatefulSet that mounts an NFS-backed PVC:
+
+```bash
+./bin/shutdown-nfs-workloads.sh --dry-run
+./bin/shutdown-nfs-workloads.sh
+```
+
+The shutdown script discovers StorageClasses whose provisioner contains `nfs`,
+finds the live workloads that use PVCs from those classes, and saves each
+workload's current replica count in `bin/.nfs-workload-replicas.tsv`. It scales
+Deployments down first and waits for them to terminate before scaling down
+StatefulSets, so application processes stop before data services such as
+Postgres. Do not begin NFS maintenance unless the script completes successfully.
+
+After the NFS server is available again, restore the saved replica counts:
+
+```bash
+./bin/restore-nfs-workloads.sh --dry-run
+./bin/restore-nfs-workloads.sh
+```
+
+The restore script starts and waits for StatefulSets before starting
+Deployments. It removes the replica state file only after every workload is
+successfully restored. Both scripts accept `--state-file PATH` and
+`--timeout DURATION`; their help output documents the corresponding
+environment-variable overrides.
+
+The scripts intentionally cover Deployments and StatefulSets. Confirm that no
+one-off Job or unmanaged Pod is using an NFS-backed PVC before taking the NFS
+server offline.
+
+When adding a stack or changing a workload, PVC, NFS StorageClass, or Helm
+values, deploy the change and rerun the shutdown dry run. Keep both scripts and
+this maintenance procedure updated if the new workload pattern is not detected.
+
 ### Gateaways created
 
 Two general purpose HTTP/s gateways creeated.

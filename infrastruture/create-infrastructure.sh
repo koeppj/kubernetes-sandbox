@@ -19,7 +19,6 @@ source $SCRIPT_DIR/../.env
 export aws_access_key_id_encoded=$(echo ${aws_access_key_id} | tr -d '[:space:]' | base64)
 export aws_secret_access_key_encoded=$(echo ${aws_secret_access_key} | tr -d '[:space:]' | base64)
 export aws_default_region_encoded=$(echo ${aws_default_region} | tr -d '[:space:]' | base64)
-export kube_host_ip=$(curl -s -4 icanhazip.com)
 #
 # Enable plugins
 #
@@ -97,8 +96,8 @@ microk8s helm install exdns --namespace infrastructure \
 #
 # Create the docker images used
 #
-docker build -t localhost:32000/awsecr --push -f awsecr.Dockerfile .
-docker build -t localhost:32000/awsdns --push -f awsdns.Dockerfile .
+"$SCRIPT_DIR/scripts/build-import-awsecr.sh" || exit $?
+"$SCRIPT_DIR/scripts/build-import-awsdns.sh" || exit $?
 #
 # Create WASM Runtime Classes for SpinKube
 #
@@ -117,9 +116,10 @@ kubectl label namespace --overwrite infrastructure koeppster.net\/aws_enabled=tr
 #
 # Create other resources 
 #
-envsubst < create-aws-credentials.yaml | kubectl apply -f -
-envsubst < create-awsdns-updater.yaml | kubectl apply -f -
-envsubst < aws-ecr-role-and-cron.yaml | kubectl apply -f -
+(set -o pipefail; envsubst < "$SCRIPT_DIR/create-aws-credentials.yaml" | microk8s kubectl apply -f -) || exit $?
+"$SCRIPT_DIR/scripts/deploy-awsdns.sh" || exit $?
+export ecrtoken_issuer_schedule
+envsubst '${ecrtoken_issuer_schedule}' < "$SCRIPT_DIR/aws-ecr-role-and-cron.yaml" | microk8s kubectl apply -f -
 envsubst < create-storage-class.yaml | kubectl apply -f -
 envsubst < postgres-storage-class.yaml | kubectl apply -f -
 envsubst < create-cert-issuer.yaml | kubectl apply -f -

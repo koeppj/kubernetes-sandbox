@@ -1,0 +1,110 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: n8n-postgres-v17-restore
+  namespace: n8n
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        job: n8n-postgres-v17-restore
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: restore
+          image: postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              cd /backup
+              sha256sum -c n8n-postgres-pre-pg17.sha256
+
+              until psql \
+                --host=postgres-n8n-v17 \
+                --username="$POSTGRES_USER" \
+                --dbname="$POSTGRES_DB" \
+                --tuples-only \
+                --command='SELECT 1' >/dev/null 2>&1; do
+                sleep 2
+              done
+
+              pg_restore \
+                --host=postgres-n8n-v17 \
+                --username="$POSTGRES_USER" \
+                --dbname="$POSTGRES_DB" \
+                --role="$POSTGRES_NON_ROOT_USER" \
+                --no-owner \
+                --no-privileges \
+                --exit-on-error \
+                n8n-postgres-pre-pg17.dump
+
+              psql \
+                --host=postgres-n8n-v17 \
+                --username="$POSTGRES_USER" \
+                --dbname="$POSTGRES_DB" \
+                --command="ANALYZE;"
+
+              check_count() {
+                metric="$1"
+                table="$2"
+                expected=$(sed -n "s/^${metric}|//p" n8n-postgres-pre-pg17.inventory)
+                actual=$(psql \
+                  --host=postgres-n8n-v17 \
+                  --username="$POSTGRES_USER" \
+                  --dbname="$POSTGRES_DB" \
+                  --no-align \
+                  --tuples-only \
+                  --command="select count(*) from ${table};")
+                test -n "$expected"
+                test "$actual" = "$expected"
+                printf '%s count verified: %s\n' "$metric" "$actual"
+              }
+
+              check_count workflows workflow_entity
+              check_count credentials credentials_entity
+              check_count executions execution_entity
+              check_count migrations migrations
+
+              expected_migration=$(sed -n 's/^latest_migration|//p' n8n-postgres-pre-pg17.inventory)
+              actual_migration=$(psql \
+                --host=postgres-n8n-v17 \
+                --username="$POSTGRES_USER" \
+                --dbname="$POSTGRES_DB" \
+                --no-align \
+                --tuples-only \
+                --command="select id || '|' || name from migrations order by id desc limit 1;")
+              test "$actual_migration" = "$expected_migration"
+              printf 'latest migration verified: %s\n' "$actual_migration"
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_DB
+            - name: POSTGRES_NON_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_NON_ROOT_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: backup
+              mountPath: /backup
+              readOnly: true
+      volumes:
+        - name: backup
+          persistentVolumeClaim:
+            claimName: n8n-recovery-backup
