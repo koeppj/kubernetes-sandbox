@@ -2,6 +2,20 @@
 
 This component runs one Jenkins controller on NFS-backed storage. The controller image is built and published to ECR as an explicit administrative step; deployment never builds it. Jenkins Configuration as Code (JCasC) is stored outside the image so operational configuration can change independently.
 
+## Prerequisites
+
+Deployment requires Bash, GNU coreutils (`base64`, `tr`, and path utilities),
+`envsubst` (`gettext-base`), `sed`, `microk8s kubectl`, and a local AWS CLI that
+supports `ecr get-login-password`. The webhook-secret example also uses
+`openssl`. Configure AWS/GitHub credentials and ensure shared Gateways, NFS
+storage, and registry/API access are ready.
+
+Image publishing separately requires Docker CLI, a running daemon, and an
+already authenticated registry session with push permission. The build scripts
+do not log Docker in. Java, Jenkins plugins, Git, `kubectl`, AWS CLI, and
+BuildKit tools used by the controller/agents are provided by their images;
+see the [dependency inventory](../docs/dependencies.md#tools-supplied-by-images-or-external-application-projects).
+
 ## Configure
 
 ```bash

@@ -13,6 +13,21 @@ starting points; if this doc and the files under `k8s/` ever disagree, the
 files under `k8s/` are correct (they're what's actually been built and run)
 and this doc is stale and should be updated to match.
 
+## Sandbox deployment prerequisites
+
+For this repository, use `box/scripts/deploy-portal.sh` with Bash, GNU `dirname`,
+and `microk8s kubectl`. Prepare `box/.env` with `PORTAL_SESSION_SECRET` and all
+three files under `box/secrets/`: `oidc.json`, `box-jwt-auth.json`, and
+`box_config.json`. The script requires all three, regardless of the alternative
+configuration approaches described in this application reference.
+
+The build examples below require Docker/registry access in the external
+application checkout. The OIDC setup helper requires that project's Node.js/npm;
+secret generation uses `openssl`, and HTTP validation uses `curl`. They are not
+called by the sandbox deployment script. Use `microk8s kubectl` for the bare
+`kubectl` examples and provide the shared Gateway, image pull credentials, and
+Box/OIDC access. See the [dependency inventory](../docs/dependencies.md).
+
 ## 1. What the image is
 
 The root `Dockerfile` is a multi-stage build that produces **one image**

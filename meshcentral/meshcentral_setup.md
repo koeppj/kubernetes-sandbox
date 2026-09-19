@@ -1,5 +1,13 @@
 # MicroK8s MeshCentral Setup
 
+## Deployment prerequisites
+
+Provide Bash, GNU coreutils/path utilities, `envsubst` (`gettext-base`), and
+`microk8s kubectl`. Configure the component `.env` and `secrets/config.json`.
+The cluster needs NFS CSI/storage, the shared public Gateway and TLS/DNS setup,
+and reachability of the configured OIDC provider. MeshCentral's application
+runtime comes from its image. See the [dependency inventory](../docs/dependencies.md).
+
 ## Goal
 
 Deploy MeshCentral on the existing MicroK8s cluster using the project-standard app stack pattern:

@@ -4,6 +4,18 @@
 
 This project memorializes the setups performed to create my [MicroK8s](https://microk8s.io/) environment.  It can used create/recreate the environment at will and as a model or other learnig, prototype and personal developent environments.
 
+## Deployment and maintenance prerequisites
+
+See the [dependency inventory](docs/dependencies.md) for OS package/tool mappings,
+requirements for each stack and maintenance script, container-provided utilities,
+and read-only prerequisite checks. Start with Bash/GNU utilities, MicroK8s, and
+`envsubst` (`gettext-base`); infrastructure also needs both MicroK8s Helm wrappers,
+Docker, and `curl`. Jenkins deployment additionally calls the AWS CLI locally.
+
+Local cluster backup/restore needs `sudo`, systemd, `tar`, and `gzip`, plus the
+specific MicroK8s service layout described in the inventory. NFS workload
+shutdown/restore needs Bash 4+ and the saved replica-state file for restoration.
+
 ## TO-DO list
 
 - [ ] Update [Notes on Use](#notes-on-use) section.
@@ -48,6 +60,11 @@ Creates A records for Certificate and HTTPRoute resources.
 ### Using k8s_gateway to connect to local lab DNS server
 
 ### NFS server maintenance
+
+Prerequisites: Bash 4+, `microk8s kubectl`, the GNU utilities listed under
+[maintenance host tools](docs/dependencies.md#maintenance-host-tools), cluster-wide
+workload/storage read permissions, scale permissions, and a writable state-file
+location. Restore requires the state file produced by shutdown.
 
 Before restarting or patching the backing NFS server, stop every running
 Deployment and StatefulSet that mounts an NFS-backed PVC:

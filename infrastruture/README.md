@@ -6,6 +6,22 @@
 
 - [x] Update [create-infrstructure](create-infrastructure.sh) to exclude KWASM plugin and include SpinKube install.
 
+## Tool and platform prerequisites
+
+Install/provide Bash, GNU coreutils, `envsubst` (`gettext-base`), `grep`, `curl`
+and CA certificates, Docker CLI with a running accessible daemon, and MicroK8s
+with working `microk8s kubectl`, `microk8s helm`, `microk8s helm3`, and
+`microk8s images import`. Full setup also uses bare `kubectl`; configure it to
+resolve to MicroK8s as described in the [dependency inventory](../docs/dependencies.md#microk8s-helm-and-bare-kubectl).
+Image import needs temporary disk space and access to every joined node.
+SpinKube cleanup additionally uses GNU `xargs` (`findutils`).
+
+The NFS server/exports, node NFS support, AWS credentials/API access, and access
+to chart/image registries are also prerequisites. The AWS CLI and `jq` used by
+the DNS updater run in its image; an on-demand ECR refresh needs only Bash,
+`date`, MicroK8s, and the existing CronJob, image, credentials, and RBAC. See the
+[complete workflow and runtime inventory](../docs/dependencies.md) for details.
+
 ## Instructions
 
 ### Assumptions
@@ -19,7 +35,7 @@ export aws_secret_access_key=<aws secret key assosciated with the above key id>
 export aws_hosted_zone_id=<aws route53 zone ID that will be used by cert-manager>
 export ecrtoken_issuer_schedule="0 */8 * * *"
 export cert_issuer_mode=<prod | stage>
-export nfs_server_id=<ip address of NFS Server by storage NFS CNI Storage>
+export nfs_server_ip=<ip address of NFS Server by storage NFS CNI Storage>
 ```
 
 Make sure all nodes are joined to cluster before running the script.
@@ -30,10 +46,12 @@ Label specific nodes in the following manner:
 
 ### Installation
 
-To create run environment the following script.  
+From the repository root, enter `infrastruture/` before running full setup;
+several manifest paths are relative to the working directory:
 
-```
-# ./create-infrastructure.sh
+```bash
+cd infrastruture
+./create-infrastructure.sh
 ```
 
 ### AWS ECR updater image deployment

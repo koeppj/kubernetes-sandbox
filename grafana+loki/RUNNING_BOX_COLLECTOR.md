@@ -2,6 +2,18 @@
 
 This document describes how to configure, start, monitor, and reset the Box event collector in Kubernetes.
 
+## Deployment prerequisites
+
+Provide Bash, GNU coreutils/path utilities, `envsubst` (`gettext-base`),
+`microk8s kubectl`, and `microk8s helm`; configure the component `.env` and
+`secrets/sandbox.json`. Full deployment needs access to Grafana's chart repository,
+shared Gateways, NFS CSI/exports for the PVCs, Box API access, and private-image
+pull credentials. The reload-events script also invokes Helm.
+
+Commands below use `kubectl` as shorthand for `microk8s kubectl`. The cursor-file
+`rm` command runs in a maintenance pod mounting the state PVC. See the
+[dependency inventory](../docs/dependencies.md) for host and container tools.
+
 ## Runtime behavior
 
 The collector stores the Box stream cursor in:

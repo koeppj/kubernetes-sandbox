@@ -4,6 +4,14 @@ This repository captures a MicroK8s lab environment built around shell-driven Ku
 
 The `infrastruture/` path is misspelled in the repository and should be treated as canonical unless a cleanup explicitly renames it everywhere.
 
+## Operator prerequisites
+
+The [dependency inventory](./dependencies.md) maps OS tools and packages to every
+stack, image build, and maintenance workflow, including Keycloak (`keyclock/`),
+Postfix, default/test examples, and planned NFS HA work. It distinguishes tools
+needed on the operator host from utilities supplied by containers. Read it before
+running the deployment or maintenance entry points below.
+
 ## Deployment Model
 
 ```mermaid

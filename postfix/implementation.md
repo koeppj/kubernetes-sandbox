@@ -1,5 +1,10 @@
 # Implementation Plan
 
+Before this procedure, check the [Postfix prerequisites](README.md#operational-prerequisites)
+and [project tool inventory](../docs/dependencies.md). Building requires Docker;
+rendering/deploying requires Bash, `envsubst`, `sed`, and MicroK8s. Host firewall
+work requires `iptables` and the existing persistence tools with elevated access.
+
 ## 1. Preflight
 
 1. Capture the current AWS Mail Manager MX record and rule-set configuration
