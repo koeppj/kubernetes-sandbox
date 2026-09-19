@@ -31,6 +31,17 @@ cutover, rollback, and validation procedure is in
 
 ## Operational Prerequisites
 
+The scripts need Bash, GNU path utilities, `envsubst` (`gettext-base`), `sed`,
+and `microk8s kubectl`. Deployment builds/pushes by default, so Docker CLI, a
+running daemon, and registry push access are required unless
+`POSTFIX_BUILD_IMAGE=false` selects an already published image. Postfix and
+`postconf` are installed in the container image, not on the host.
+
+Host forwarding maintenance requires `iptables`, elevated access, and the
+existing firewall persistence mechanism. The cluster needs the `TCPRoute` CRD
+and Gateway SMTP listener; validation needs an external SMTP client. See the
+[dependency inventory](../docs/dependencies.md) for package mappings and checks.
+
 Configure the inbound address in `postfix/.env`:
 
 ```dotenv

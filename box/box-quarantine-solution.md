@@ -2,6 +2,16 @@
 
 This component deploys a single-replica `StatefulSet` based on the image `996472359368.dkr.ecr.us-east-1.amazonaws.com/box-quarantine-container:latest`.
 
+## Prerequisites
+
+Deployment requires Bash, GNU coreutils (`dirname`, `mktemp`, `rm`), `sed`,
+`envsubst` (`gettext-base`), and `microk8s kubectl`, plus `box/.env`, the Box JWT
+file, and the template listed below. Provide NFS storage, Box API access, and
+private-image pull credentials. Pause/resume require only Bash and MicroK8s.
+The scripts currently target `box-enterprise-quarantine` for secrets/scaling
+while manifests use `box`; reconcile that mismatch before running them.
+See the [dependency inventory](../docs/dependencies.md).
+
 ## Kubernetes Artifacts
 
 Located in [manifests](./manifests)

@@ -4,6 +4,19 @@ The production deployment runs n8n 2.37.10 against PostgreSQL 17.11. Both
 images are pinned by tag and digest. Use `scripts/deploy-n8n.sh` for normal
 idempotent deployments.
 
+## Prerequisites
+
+The scripts require Bash, GNU coreutils (including `base64` and `tr`),
+`envsubst` (`gettext-base`), and `microk8s kubectl`. Configure `n8n/.env` from its
+sample, preserving existing encryption credentials. The cluster needs the shared
+Gateway, `kube-nfs`/`kube-postgres` storage, and private-image pull credentials.
+
+Recovery additionally requires completed backup Jobs and the recovery PVC.
+`pg_dump`, `pg_restore`, `psql`, `pg_isready`, `tar`, gzip support, `sha256sum`, and
+`sed` run in the referenced containers. Jenkins builds use the Jenkins tools
+image and BuildKit. See the [dependency inventory](../docs/dependencies.md) for
+host/image boundaries and maintenance prerequisites.
+
 ## Data safety
 
 - `n8n-pv-claim` contains n8n configuration and filesystem-backed binary data.

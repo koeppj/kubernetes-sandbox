@@ -1,8 +1,15 @@
 # Box Redaction Solution Deployment
 
 This component deploys a single-replica `Deployment` based on the image `996472359368.dkr.ecr.us-east-1.amazonaws.com/boxredact:latest`. The Docker image itself is a basic standalone static web deployment
-with no dependencies. It will be publicly available on https://boxredact.johnkoepp.com via the
+with the deployment dependencies listed below. It will be publicly available on https://boxredact.johnkoepp.com via the
 public existing gateway `johnkoepp-com-gateway`. All artifacts are deployed in the `box` namespace.
+
+## Deployment prerequisites
+
+The sandbox scripts require Bash, `dirname` (GNU coreutils), and
+`microk8s kubectl`. They apply the namespace, Service, and Gateway route; the
+application endpoint and shared Gateway/TLS/DNS setup must be available.
+See the [dependency inventory](../docs/dependencies.md).
 
 ## Kubernetes Artifacts
 
