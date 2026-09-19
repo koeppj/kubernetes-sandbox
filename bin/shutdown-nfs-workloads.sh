@@ -18,7 +18,7 @@ PVC to zero. The current replica counts are saved for restore-nfs-workloads.sh.
 Options:
   --dry-run          Print the detected workloads without changing the cluster.
   --state-file PATH  Override the replica state file (default: ${STATE_FILE}).
-  --timeout VALUE    Rollout timeout accepted by kubectl (default: ${TIMEOUT}).
+  --timeout VALUE    Maximum wait for each workload to stop (default: ${TIMEOUT}).
   -h, --help         Show this help.
 EOF
 }
@@ -53,6 +53,10 @@ done
 
 command -v microk8s >/dev/null 2>&1 || {
   echo "microk8s is required but was not found in PATH." >&2
+  exit 1
+}
+command -v timeout >/dev/null 2>&1 || {
+  echo "timeout is required but was not found in PATH." >&2
   exit 1
 }
 
@@ -173,12 +177,44 @@ scale_kind_to_zero() {
     [[ "$resource_kind" == "$requested_kind" ]] || continue
     replicas="${targets[$key]}"
     [[ "$replicas" != "0" ]] || continue
-    "${KUBECTL[@]}" wait \
-      --for=jsonpath='{.status.replicas}'=0 \
-      "$resource_kind/$name" \
-      --namespace "$namespace" \
-      --timeout="$TIMEOUT"
+    wait_for_zero_replicas "$resource_kind" "$namespace" "$name"
   done
+}
+
+wait_for_zero_replicas() {
+  local resource_kind="$1"
+  local namespace="$2"
+  local name="$3"
+  local wait_status
+
+  if timeout --foreground "$TIMEOUT" bash -c '
+    resource_kind="$1"
+    namespace="$2"
+    name="$3"
+    shift 3
+
+    while true; do
+      status_replicas="$("$@" get "$resource_kind/$name" \
+        --namespace "$namespace" \
+        -o jsonpath="{.status.replicas}")" || exit 1
+
+      # Kubernetes omits zero-valued status fields when serializing the object.
+      if [[ -z "$status_replicas" || "$status_replicas" == "0" ]]; then
+        exit 0
+      fi
+
+      sleep 1
+    done
+  ' _ "$resource_kind" "$namespace" "$name" "${KUBECTL[@]}"; then
+    return 0
+  else
+    wait_status=$?
+  fi
+
+  if [[ "$wait_status" == "124" ]]; then
+    echo "Timed out waiting for ${resource_kind} ${namespace}/${name} to stop." >&2
+  fi
+  return "$wait_status"
 }
 
 # Stop application front ends before stateful data services such as Postgres.
