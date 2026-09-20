@@ -14,8 +14,8 @@ LVs, and `/srv/ha/...` exports with phased stack migration. See the
 [overview naming table](drbd-pacemaker-nfs-ha-overview.md#configuration-names)
 and [implementation naming reference](new_node_implementation.md#configuration-naming-reference)
 for exact LV paths, DRBD mappings, Pacemaker IDs, configuration artifacts,
-and Kubernetes names. The implementation plan also labels future shell scripts
-that have not yet been created.
+and Kubernetes names. Source-host capacity and allocation steps are in
+[`ubuntu-slave1` storage preparation](ubuntu-slave1-storage-preparation.md).
 
 The commands below describe the existing preparation tooling. In particular,
 the Python-backed configuration helper still emits the old mount paths in
@@ -39,6 +39,19 @@ sudo ./scripts/nfs-ha-packages.sh --apply         # guarded update + install
 sudo ./scripts/nfs-ha-lvm.sh                      # creates all five LVs immediately
 sudo ./scripts/nfs-ha-config.sh --output /var/lib/nfs-ha-preparation/staging-UNIQUE
 ```
+
+On `ubuntu-slave1`, preview and then create its five backing LVs from existing
+free extents. The existing filesystems and LVs do not need resizing:
+
+```bash
+sudo ./scripts/nfs-ha-peer-lvm.sh
+sudo ./scripts/nfs-ha-peer-lvm.sh --apply
+```
+
+Run the repository's Kubernetes workload shutdown/restore helpers from a
+MicroK8s control-plane host. This worker's local `microk8s kubectl` does not
+enumerate the cluster and must not be used to conclude that there are no NFS
+consumers.
 
 Preflight and package simulation do not mutate storage, packages, or services.
 The Python-backed entrypoints write private timestamped logs and a lock under

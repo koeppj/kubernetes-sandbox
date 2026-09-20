@@ -10,22 +10,22 @@ This is a two-node active/passive NFS design, not an active/active NFS cluster a
 
 The hosts are **`ubuntu-slave1.koeppster.lan`** (existing NFS server) and **`ubuntu-master2.koeppster.lan`** (new HA peer). No additional server is planned. This is a development and demo environment: planned outages are acceptable. Prefer a straightforward, operator-reviewed migration over elaborate arrangements to keep every stack online.
 
-The selected approach is a **data-copy migration into new DRBD-backed filesystems**, followed by stack-by-stack cutovers over multiple maintenance windows or weekends. Shrink the original filesystems/LVs on `ubuntu-slave1` to free capacity for new backing LVs; do not convert the original filesystems to DRBD in place. See [new node implementation](new_node_implementation.md) for host-specific preparation.
+The selected approach is a **data-copy migration into new DRBD-backed filesystems**, followed by stack-by-stack cutovers over multiple maintenance windows or weekends. Allocate the new backing LVs from existing free extents and do not convert the original filesystems to DRBD in place. Read-only inspection on 2026-09-20 confirmed that `ubuntu-slave1` does not need an initial filesystem/LV shrink for the planned sizes. See [`ubuntu-slave1` storage preparation](ubuntu-slave1-storage-preparation.md) and [new node implementation](new_node_implementation.md) for host-specific preparation.
 
 ## Current storage inventory
 
-The current NFS host, `ubuntu-slave1.koeppster.lan`, has four separate local ext4 filesystems on LVM logical volumes. Preserve their separation in four new DRBD data resources and exports. The inventory below is a planning baseline; recheck usage, minimum filesystem sizes, and free extents before resizing.
+The current NFS host, `ubuntu-slave1.koeppster.lan`, has four separate local ext4 filesystems on LVM logical volumes. Preserve their separation in four new DRBD data resources and exports. The inventory below is a planning baseline; recheck usage and free extents before allocating the new LVs.
 
 | Existing mount/export | Current backing LV | Provisioned size | Observed use | Target DRBD backing LV |
 |---|---|---:|---:|---:|
-| `/srv/nfs-lv` | `nfs-vg/nfs-lv` on `/dev/sdb` | 500G | ~1.3G | **100G** |
-| `/srv/kube-lv` | `kube-vg/kube-lv` on `/dev/sdc` | 500G | ~2.9G | **200G** |
-| `/srv/kube-grafana` | `kube-vg/kube-grafana` on `/dev/sdc` | 20G | ~51M | **5G** |
-| `/srv/kube-postgres` | `kube-vg/kube-postgres` on `/dev/sdc` | 100G | ~221M | **50G** |
+| `/srv/nfs-lv` | `nfs-vg/nfs-lv` | 500G | ~1.3G | **100G** |
+| `/srv/kube-lv` | `kube-vg/kube-lv` | 500G | ~3.2G | **200G** |
+| `/srv/kube-grafana` | `kube-vg/kube-grafana` | 20G | ~51M | **5G** |
+| `/srv/kube-postgres` | `kube-vg/kube-postgres` | 100G | ~222M | **50G** |
 
-Add a **1 GiB** backing LV named `drbd-nfs-state`, with DRBD resource `nfs-state`, mounted at `/var/lib/nfs-ha`, for private NFS recovery state. It is never exported. Total new backing allocation is **356 GiB per node**: four data resources plus one state resource. These are backing-device sizes; internal DRBD metadata and ext4 overhead reduce usable capacity. Leave additional VG reserve. These target sizes do not specify how small to shrink the original LVs; choose those sizes separately from live usage, filesystem checks, and continued writes by unmigrated stacks.
+Add a **1 GiB** backing LV named `drbd-nfs-state`, with DRBD resource `nfs-state`, mounted at `/var/lib/nfs-ha`, for private NFS recovery state. It is never exported. Total new backing allocation is **356 GiB per node**: four data resources plus one state resource. These are backing-device sizes; internal DRBD metadata and ext4 overhead reduce usable capacity. Leave additional VG reserve.
 
-Freed extents remain in their original VG. Budget `nfs-vg` and `kube-vg` separately on `ubuntu-slave1`; their combined free space is not one allocation pool. The existing and new copies must fit simultaneously. Monitor usage and extend before a filesystem becomes constrained.
+As verified on 2026-09-20, `nfs-vg` has 897.26 GiB free and `kube-vg` has 311.51 GiB free. After allocating the planned 101 GiB and 255 GiB respectively, they retain about 796.26 GiB and 56.51 GiB. Budget the VGs separately; their combined free space is not one allocation pool. Recheck immediately before creation and monitor the smaller `kube-vg` reserve.
 
 The export roots themselves are `65534:65534` and mode `0777`; the meaningful differences are their NFS export options and the ownership within their PVC directories.
 
@@ -41,11 +41,11 @@ Use these planned names consistently in scripts, templates, and migration record
 | `postgres` | `kube-vg/drbd-postgres` | `ubuntu-vg/drbd-postgres` | `/srv/ha/kube-postgres` | `kube-postgres` |
 | `nfs-state` | `nfs-vg/drbd-nfs-state` | `ubuntu-vg/drbd-nfs-state` | `/var/lib/nfs-ha` (private, not exported) | None |
 
-This assigns **101 GiB** of new backing LVs to `nfs-vg` and **255 GiB** to `kube-vg` on `ubuntu-slave1`, subject to live capacity verification before shrinking. `/dev/<VG>/<LV>` is the backing-device path, not the filesystem mount source; mount through DRBD.
+This assigns **101 GiB** of new backing LVs to `nfs-vg` and **255 GiB** to `kube-vg` on `ubuntu-slave1`, subject to live capacity verification before allocation. `/dev/<VG>/<LV>` is the backing-device path, not the filesystem mount source; mount through DRBD.
 
 Name the Corosync/Pacemaker cluster `nfs-ha`, its service group `g-nfs-ha`, the NFS primitive `p-nfs-server`, and the VIP primitive `p-nfs-vip`. Use `nfs-ha.koeppster.lan` as the proposed service DNS name after DNS configuration, with a separately reserved VIP; neither host's physical IP becomes the VIP. Keep the existing `nfs_server_ip` component variable and set it to that VIP during cutover. Do not assume the proposed DNS name already resolves.
 
-The [implementation naming reference](new_node_implementation.md#configuration-naming-reference) defines DRBD devices/ports, Pacemaker IDs, configuration files, and migration artifact names. The [script interfaces](new_node_implementation.md#script-interfaces) distinguish existing entrypoints from proposed scripts, including `nfs-ha-source-resize.sh`, `nfs-ha-peer-lvm.sh`, `nfs-ha-drbd-init.sh`, `nfs-ha-activate.sh`, `nfs-ha-migrate-stack.sh`, and `nfs-ha-rollback-stack.sh`. These later scripts are planned, not implemented by this documentation update.
+The [implementation naming reference](new_node_implementation.md#configuration-naming-reference) defines DRBD devices/ports, Pacemaker IDs, configuration files, and migration artifact names. The [script interfaces](new_node_implementation.md#script-interfaces) distinguish existing entrypoints from proposed scripts. `nfs-ha-peer-lvm.sh` now previews and creates the source-host backing LVs without resizing existing storage. DRBD initialization, activation, migration, and rollback scripts remain planned.
 
 ## Target architecture
 
@@ -65,7 +65,7 @@ active or standby   standby or active
        (five resources)
 ```
 
-Use free space in the existing `ubuntu-vg` on `ubuntu-master2` and space reclaimed within the existing VGs on `ubuntu-slave1`. No spare dedicated disk or new VG is required. Both nodes create corresponding backing LVs for all five resources. Match backing sizes and configure explicit node-specific paths; VG/LV names need not match between nodes.
+Use free space in the existing `ubuntu-vg` on `ubuntu-master2` and the existing free extents in `nfs-vg` and `kube-vg` on `ubuntu-slave1`. No spare dedicated disk or new VG is required. Both nodes create corresponding backing LVs for all five resources. Match backing sizes and configure explicit node-specific paths; VG/LV names need not match between nodes.
 
 ```text
 existing local disk
@@ -142,13 +142,13 @@ Do not leave `stonith-enabled=false` as the finished configuration. A quorum/wit
 
 ### Prepare capacity and the HA service
 
-1. Review live storage identities, usage, backups, and a per-VG allocation plan. Create the five new backing LVs on `ubuntu-master2` using its existing Linux PV; exclude its Windows disk and root LV.
-2. Schedule a shared outage on `ubuntu-slave1`. Review `./bin/shutdown-nfs-workloads.sh --dry-run`, then use the shutdown helper. Separately stop Jobs, CronJob writers, unmanaged Pods, and non-Kubernetes clients that use the affected exports.
-3. Stop the affected exports and unmount each original filesystem. Check ext4, shrink the **filesystem first**, check it again, and only then reduce its LV to a size that contains the filesystem. Choose sizes from current evidence, not the historical usage table. Back up filesystem contents before this operation; `vgcfgbackup` alone cannot restore files.
-4. Verify and remount the resized original filesystems. Create the new DRBD backing LVs in the reclaimed extents, keeping original LVs and data. Source shrinking is a separate reviewed procedure from the new-node LV creation script.
+1. Review live storage identities, usage, backups, and the per-VG allocation plan. Create the five new backing LVs on `ubuntu-master2` using its existing Linux PV; exclude its Windows disk and root LV.
+2. On `ubuntu-slave1`, run `sudo ./nfs-ha/scripts/nfs-ha-peer-lvm.sh` from the repository root and review its identity, capacity, reserve, and exact-command output. The current plan uses already-free extents and leaves all four legacy filesystems mounted and unchanged.
+3. Run the same script with `--apply` to save LVM metadata and create the five unformatted backing LVs. Inspect their sizes and backing PVs. Do not format the LVs directly or initialize DRBD in this step.
+4. Schedule a shared outage for DRBD initialization, NFS ownership changes, and failover testing. Run workload discovery and shutdown from a MicroK8s control-plane host; the local worker `microk8s kubectl` cannot enumerate this cluster. Separately stop Jobs, CronJob writers, unmanaged Pods, and non-Kubernetes clients that use the affected exports.
 5. Configure all five DRBD resources, explicitly designate the initialization source, create ext4 once on each **new DRBD device**, and complete synchronization. Use the separate HA mount paths and private state mount.
 6. Configure Pacemaker/Corosync, NFS recovery, exports, fencing, and the new VIP. Validate startup/stop ordering and controlled failover during an outage before moving stacks. Resolve NFS service ownership on `ubuntu-slave1`; legacy service startup must not compete with Pacemaker.
-7. Restore the original service for unmigrated stacks and review `./bin/restore-nfs-workloads.sh --dry-run` before restoring recorded replicas. Account separately for writers not covered by the helpers.
+7. Restore the original service for unmigrated stacks and review `./bin/restore-nfs-workloads.sh --dry-run` on the control-plane host before restoring recorded replicas. Account separately for writers not covered by the helpers.
 
 For normal operation between migration windows, prefer `ubuntu-master2` as the HA active node while legacy exports remain on `ubuntu-slave1`. This preference is not isolation: failover onto `ubuntu-slave1`, fencing either host, and shared NFS configuration changes can require a shared outage. Fencing also stops any Kubernetes workloads/control-plane services on the fenced host. Do not promise uninterrupted legacy exports or run two competing host NFS service managers. Finalize and human-review the transitional service ownership procedure before activation; outages are acceptable when switching ownership for tests or recovery.
 
@@ -174,9 +174,9 @@ Old and new PVs can temporarily share StorageClass names. Track each PV's actual
 
 ## Implementation and QA approach
 
-Use small Bash scripts under `nfs-ha/scripts/` for repeatable inventory, rendering, package installation, copying, and cluster operations. Prefer direct standard commands over complex Python orchestration or a new automation framework. Keep source resizing, new LV creation, HA activation, and individual stack migrations separate and reviewable. Resolve paths from `BASH_SOURCE`, keep live values in component-local `.env` with placeholder-only `.env.sample` updates, and apply `envsubst` selectively.
+Use small Bash scripts under `nfs-ha/scripts/` for repeatable inventory, rendering, package installation, copying, and cluster operations. Prefer direct standard commands over complex Python orchestration or a new automation framework. Keep new LV creation, HA activation, and individual stack migrations separate and reviewable. Resolve paths from `BASH_SOURCE`, keep live values in component-local `.env` with placeholder-only `.env.sample` updates, and apply `envsubst` selectively.
 
-Human review is the primary QA method: inspect live inventory and proposed commands, review dry-run output and rendered configuration, execute a bounded step, then inspect actual storage, cluster, and application behavior. Use `bash -n`, ShellCheck, package simulations, and native configuration validators where useful. Do not require extensive mocked tests, disposable-VM suites, or automated evidence/approval frameworks. Preserve basic error handling and stop on unexpected state; manual review does not replace backups before shrinking or working fencing before automatic failover.
+Human review is the primary QA method: inspect live inventory and proposed commands, review dry-run output and rendered configuration, execute a bounded step, then inspect actual storage, cluster, and application behavior. Use `bash -n`, ShellCheck, package simulations, and native configuration validators where useful. Do not require extensive mocked tests, disposable-VM suites, or automated evidence/approval frameworks. Preserve basic error handling and stop on unexpected state; manual review does not replace backups or working fencing before automatic failover.
 
 ## Routine operations
 
@@ -192,13 +192,13 @@ Human review is the primary QA method: inspect live inventory and proposed comma
 
 Growing is the normal path. Extend the matching backing LV on **both** nodes, make DRBD recognize the larger backing size, then grow ext4 on the active DRBD device. Validate each resource’s current DRBD version/configuration and peer state before executing a resize runbook.
 
-Avoid shrinking established DRBD resources in place. It requires an offline, top-down contraction—filesystem, then DRBD, then backing LV—on both peers, and errors can destroy data. This differs from the initial migration's shrink of original non-DRBD ext4/LVs. For a later major reduction, create a new smaller DRBD resource/filesystem, copy, cut over, and retain the former resource until rollback is no longer needed.
+Avoid shrinking established DRBD resources in place. It requires an offline, top-down contraction—filesystem, then DRBD, then backing LV—on both peers, and errors can destroy data. For a later major reduction, create a new smaller DRBD resource/filesystem, copy, cut over, and retain the former resource until rollback is no longer needed.
 
 ## Cutover validation and rollback
 
 Before declaring the migration complete, test a controlled failover while monitoring a non-critical NFS client: DRBD should be promoted on one node only, all filesystems and exports should follow it, and the VIP should move after the service is ready. Confirm Grafana still writes as `472:472` and PostgreSQL as `999:999`.
 
-The original LVs are deliberately resized during preparation, so they are not untouched backups of the pre-migration layout. Backups protect that step. After successful resizing, retain those filesystems and each stack's old directories through cutover and validation; unmigrated stacks may continue writing their own directories.
+The original LVs and filesystems remain unchanged during storage preparation. Retain them and each stack's old directories through cutover and validation; unmigrated stacks may continue writing their own directories. They are rollback copies for phased migration, but they do not replace independent backups.
 
 Before new writes, roll back a failed stack by stopping its consumers, restoring its saved PV/PVC bindings to the old endpoint/directories, and obtaining fresh client mounts. Do not stop the entire HA service merely to roll back one stack if other migrated stacks depend on it. Once the stack has written to the new storage, stop writers and deliberately reconcile or restore its data before reverting. Never allow the old and new copies of the same stack to accept independent writes. Retaining the old copy for several weekends does not make it current after cutover.
 

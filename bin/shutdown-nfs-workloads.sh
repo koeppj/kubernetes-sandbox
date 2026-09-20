@@ -73,6 +73,11 @@ declare -A targets=()
 storage_class_rows="$("${KUBECTL[@]}" get storageclasses -o go-template='{{range .items}}{{.metadata.name}}{{"\t"}}{{.provisioner}}{{"\n"}}{{end}}')"
 while IFS=$'\t' read -r storage_class provisioner; do
   [[ -n "$storage_class" ]] || continue
+  if [[ -z "$provisioner" ]]; then
+    echo "Unable to read StorageClasses from the current MicroK8s node." >&2
+    echo "Run this helper on a control-plane host with working kubectl access." >&2
+    exit 1
+  fi
   if [[ "${provisioner,,}" == *nfs* ]]; then
     nfs_storage_classes["$storage_class"]=1
   fi
