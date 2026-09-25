@@ -45,7 +45,13 @@ This assigns **101 GiB** of new backing LVs to `nfs-vg` and **255 GiB** to `kube
 
 Name the Corosync/Pacemaker cluster `nfs-ha`, its service group `g-nfs-ha`, the NFS primitive `p-nfs-server`, and the VIP primitive `p-nfs-vip`. Use `nfs-ha.koeppster.lan` as the proposed service DNS name after DNS configuration, with a separately reserved VIP; neither host's physical IP becomes the VIP. Keep the existing `nfs_server_ip` component variable and set it to that VIP during cutover. Do not assume the proposed DNS name already resolves.
 
-The [implementation naming reference](new_node_implementation.md#configuration-naming-reference) defines DRBD devices/ports, Pacemaker IDs, configuration files, and migration artifact names. The [script interfaces](new_node_implementation.md#script-interfaces) distinguish existing entrypoints from proposed scripts. `nfs-ha-peer-lvm.sh` now previews and creates the source-host backing LVs without resizing existing storage. DRBD initialization, activation, migration, and rollback scripts remain planned.
+The [implementation naming reference](new_node_implementation.md#configuration-naming-reference)
+defines DRBD devices/ports, Pacemaker IDs, configuration files, and migration
+artifact names. The [script interfaces](new_node_implementation.md#script-interfaces)
+distinguish implemented entrypoints from proposed scripts. Both-node storage
+preparation and the package/configuration/DRBD initialization scripts are now
+implemented. Activation, migration, and rollback scripts remain planned. See
+the [DRBD initialization runbook](drbd-initialization.md).
 
 ## Target architecture
 

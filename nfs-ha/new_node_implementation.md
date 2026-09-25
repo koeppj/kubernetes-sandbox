@@ -75,7 +75,8 @@ Verify minors and ports are free before adopting these mappings. On `ubuntu-slav
 | Cluster item | Planned name / convention |
 |---|---|
 | Corosync/Pacemaker cluster | `nfs-ha` |
-| Node names in configuration | `ubuntu-slave1`, `ubuntu-master2`; verify against each host's actual cluster/uname identity |
+| DRBD node names | `ubuntu-slave1.koeppster.lan`, `ubuntu-master2.koeppster.lan`; each must exactly match that host's `uname -n` |
+| Future Corosync/Pacemaker node names | Verify against the identities reported by the installed cluster tools before rendering cluster configuration |
 | DRBD primitives | `p-drbd-nfs`, `p-drbd-kube`, `p-drbd-grafana`, `p-drbd-postgres`, `p-drbd-nfs-state` |
 | Promotable clone IDs | `cl-drbd-nfs`, `cl-drbd-kube`, `cl-drbd-grafana`, `cl-drbd-postgres`, `cl-drbd-nfs-state` |
 | Filesystem primitives | `p-fs-nfs`, `p-fs-kube`, `p-fs-grafana`, `p-fs-postgres`, `p-fs-nfs-state` |
@@ -143,21 +144,28 @@ Use small, readable Bash scripts and standard tools for automated activities. Pr
 
 Human review is the primary QA: inspect commands, live inventory, rendered configuration, and dry-run output, then inspect the result of each step. Do not expand this effort into extensive automated testing, disposable-VM suites, or evidence/approval frameworks. Lightweight syntax/lint checks and native validators support that review. HA activation and per-stack copy/rebinding scripts should be separate from local preparation and should not silently add those actions to these entrypoints.
 
-The preparation entrypoints live under `nfs-ha/scripts/`. Preflight, package installation, and staging currently delegate to `nfs_ha.py`; LV creation uses standalone shell scripts. The shell-first guidance above describes future implementation, not a completed rewrite. The current config script emits only `preparation.json`, still using old `/srv/...` paths; it does not yet render the HA templates or names specified here. Update that renderer before using it to prepare activation.
+The preparation entrypoints live under `nfs-ha/scripts/` and are standalone
+shell scripts. LV creation is complete on both nodes. Package installation,
+static DRBD resource installation, local metadata creation, and one-time source
+initialization are implemented as separate preview-first stages. See
+[`drbd-initialization.md`](drbd-initialization.md). Pacemaker/NFS rendering and
+activation remain blocked by the unresolved activation prerequisites below.
 
 | Script | Interface and responsibility |
 |---|---|
-| `nfs-ha-preflight.sh` | Read-only inventory, storage identity checks, package/service checks, capacity report, and unresolved activation prerequisites. |
-| `nfs-ha-packages.sh` | Default simulation; `--apply` performs the guarded installation procedure and restores temporary installation controls. |
+| `nfs-ha-packages.sh` | Implemented on both nodes: default apt simulation; `--apply` suppresses package-triggered starts, installs the fixed package set, and restores any existing `policy-rc.d`. |
 | `nfs-ha-lvm.sh` | No arguments: immediately runs five explicit `lvcreate` commands, then prints `lvs` output. Operator performs QA before execution. |
-| `nfs-ha-config.sh` | Existing `--output <directory>` stages `preparation.json` only. Planned extension renders the named templates and validates them; no automatic service activation or live CIB submission. |
+| `nfs-ha-drbd-config.sh` | Implemented on both nodes: validates the static resource templates and local targets; `--apply` installs only missing `/etc/drbd.d/*.res` files. |
+| `nfs-ha-drbd-metadata.sh` | Implemented on both nodes: previews or, with `--apply`, creates internal metadata and brings up each new DRBD resource locally. |
 
-Keep additional Bash entrypoints small and stage-specific; do not add a Python orchestrator. `nfs-ha-peer-lvm.sh` is implemented; the remaining entries are planned.
+Keep additional Bash entrypoints small and stage-specific; do not add a Python
+orchestrator. The peer-LVM and DRBD initialization entries are implemented;
+activation, migration, and rollback remain planned.
 
 | Script | Scope / intended interface |
 |---|---|
 | `nfs-ha-peer-lvm.sh` | Implemented, `ubuntu-slave1` only: default identity/capacity/allocation preview; `--apply` saves LVM metadata and creates the five named new LVs in `nfs-vg`/`kube-vg` from free extents |
-| `nfs-ha-drbd-init.sh` | Default initialization preview; `--apply` initializes only identified new targets, with an explicit initialization source and one-time ext4 creation |
+| `nfs-ha-drbd-init.sh` | Implemented on `ubuntu-master2`: requires explicit `--source ubuntu-master2`; default is a state/command preview and `--apply` performs the one-time forced source selection and ext4 creation through `/dev/drbd0`–`4`. |
 | `nfs-ha-activate.sh` | Default review of staged configuration; `--apply` performs explicit configuration installation, service-ownership handoff, and CIB submission |
 | `nfs-ha-migrate-stack.sh` | `--stack <stack-id> --phase <inventory\|copy\|rebind\|verify>`; preview by default, `--apply` executes only the selected phase |
 | `nfs-ha-rollback-stack.sh` | `--stack <stack-id>` previews restoration of saved bindings; `--apply` executes the reviewed rollback after writers stop and any data reconciliation is settled |
@@ -173,8 +181,14 @@ Required implementation behavior:
 - The script rejects arguments; old `plan`, `create`, `grow`, and `--apply` interfaces are removed. Running it with no arguments creates LVs immediately.
 - An existing target LV or other command failure stops the script. Keep partial allocations intact, inspect them, and manually execute only remaining commands after review. Never erase or automatically repair existing LVs.
 - The final `lvs` report prints UUIDs, sizes, types, and backing devices for manual verification and recordkeeping.
-- These local-preparation entrypoints provide no shrink, remove, PV-management, partition-management, filesystem-formatting, or DRBD-initialization commands. Later migration procedures cover only their explicitly reviewed stage.
-- Preflight, package installation, and staging retain their shared identity checks, process lock, restrictive permissions, and timestamped logs. The direct LV creation script does not implement those controls.
+- The LVM preparation entrypoints provide no shrink, remove, PV-management,
+  partition-management, filesystem-formatting, or DRBD-initialization commands.
+  The later DRBD scripts act only on the five named new resources in their
+  explicitly reviewed stage.
+- The implemented shell scripts use strict error handling, fixed host/target
+  checks, preview-first interfaces where appropriate, and native validation.
+  They do not maintain an orchestration ledger or automatically reconcile a
+  partial destructive run.
 
 Growth is a separate manually reviewed procedure, not a script mode. Use absolute target sizes for backing LVs and never `lvextend -r`, because ext4 belongs above DRBD. Configured resources require coordinated growth on both nodes, followed by DRBD resize and filesystem growth.
 
