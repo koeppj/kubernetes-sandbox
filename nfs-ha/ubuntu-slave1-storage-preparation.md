@@ -1,100 +1,31 @@
-# `ubuntu-slave1` storage preparation
+# `ubuntu-slave1` storage preparation: completed history and new state LV
 
-## Decision
+The earlier five-resource LV preparation has already run. Its script is
+retired and must not be rerun. The current four-resource target and the
+retirement sequence are in the [overview](drbd-pacemaker-nfs-ha-overview.md)
+and [retirement runbook](retire-legacy-nfs-lv.md).
 
-Do **not** shrink the existing NFS filesystems or logical volumes for the current
-DRBD plan. Read-only inspection on 2026-09-20 found enough free extents in each
-existing volume group to create all five DRBD backing LVs alongside the legacy
-LVs.
+The three MicroK8s data DRBD backing LVs already exist in `kube-vg`:
+`drbd-kube` (200 GiB), `drbd-grafana` (5 GiB), and `drbd-postgres`
+(50 GiB). The remaining local allocation is a **new 1 GiB**
+`kube-vg/drbd-nfs-state` LV for private NFS recovery state. Do not create
+another data LV and do not allocate HA storage from `nfs-vg`, whose physical
+path logged I/O errors during initial synchronization.
 
-| Volume group | Current free space | New allocation | Free after allocation |
-|---|---:|---:|---:|
-| `nfs-vg` | 897.26 GiB | 101 GiB | 796.26 GiB |
-| `kube-vg` | 311.51 GiB | 255 GiB | 56.51 GiB |
+The last read-only inspection showed 56.51 GiB free in `kube-vg`. A 1 GiB
+allocation would leave about 55.51 GiB, above the earlier 50 GiB reserve,
+but the live free extent count and PV identity must be checked again before
+any `lvcreate`. The expected `kube-vg` UUID is
+`yACJPE-IOuf-9bRI-B3ez-x0D1-NqpX-GzfGp2`, and its sole PV UUID is
+`ctmQ3z-B6pJ-MBgM-Zdw7-1Xrn-2Tnq-5q4swf`. Use the stable PV path
+`/dev/disk/by-id/lvm-pv-uuid-ctmQ3z-B6pJ-MBgM-Zdw7-1Xrn-2Tnq-5q4swf`.
+Disk letters are observations, not identities.
 
-The existing 500 GiB, 500 GiB, 20 GiB, and 100 GiB ext4 filesystems stay at
-their current sizes and remain mounted. No partition table, PV, filesystem, or
-existing LV needs to change. This avoids an unnecessary all-client outage and
-the irreversible risk of an offline ext4/LV shrink.
-
-The script checks a 50 GiB minimum remaining reserve in each VG. At the current
-layout, `kube-vg` is the limiting pool. Re-run the preview immediately before
-allocation because later LV creation can invalidate this decision.
-
-## Verified storage identities
-
-The preparation script is intentionally host-specific and rejects identity
-changes.
-
-| Item | Verified identity |
-|---|---|
-| Host | `ubuntu-slave1.koeppster.lan` |
-| `nfs-vg` UUID | `ciyhk9-3ztT-N0Tl-Fc0A-RaiX-9HQB-UdDRS8` |
-| `nfs-vg` PV UUID | `eZJSdB-L0oG-Gyb0-ORS5-u1pA-yFmv-tOCROr` |
-| `nfs-vg` stable PV path | `/dev/disk/by-id/lvm-pv-uuid-eZJSdB-L0oG-Gyb0-ORS5-u1pA-yFmv-tOCROr` |
-| `kube-vg` UUID | `yACJPE-IOuf-9bRI-B3ez-x0D1-NqpX-GzfGp2` |
-| `kube-vg` PV UUID | `ctmQ3z-B6pJ-MBgM-Zdw7-1Xrn-2Tnq-5q4swf` |
-| `kube-vg` stable PV path | `/dev/disk/by-id/lvm-pv-uuid-ctmQ3z-B6pJ-MBgM-Zdw7-1Xrn-2Tnq-5q4swf` |
-
-Each VG currently has exactly one PV. Device letters `/dev/sdb` and `/dev/sdc`
-are observations only and are not used as durable identifiers by the script.
-
-## Procedure
-
-1. Run the read-only preview on `ubuntu-slave1`:
-
-   ```bash
-   cd /home/koeppj/projects/kubernetes-sandbox/nfs-ha
-   sudo ./scripts/nfs-ha-peer-lvm.sh
-   ```
-
-2. Review the host, VG and PV UUIDs, free-space report, five target names, and
-   exact `lvcreate` commands. The preview must report that no storage changed.
-
-3. Confirm the five `drbd-*` targets do not exist and that the projected reserve
-   still meets the operational requirement. The script enforces 50 GiB per VG;
-   choose a larger reserve before execution if expected legacy growth requires
-   it.
-
-4. Create only the new backing LVs:
-
-   ```bash
-   sudo ./scripts/nfs-ha-peer-lvm.sh --apply
-   ```
-
-   The script saves current LVM metadata with `vgcfgbackup`, then creates five
-   linear, unformatted LVs. It does not stop NFS, unmount filesystems, initialize
-   DRBD, or format anything.
-
-5. Inspect the resulting allocation:
-
-   ```bash
-   sudo lvs nfs-vg kube-vg \
-     -o lv_name,lv_uuid,vg_name,lv_size,segtype,devices
-   sudo vgs nfs-vg kube-vg -o vg_name,vg_size,vg_free,pv_count,lv_count
-   findmnt /srv/nfs-lv /srv/kube-lv /srv/kube-grafana /srv/kube-postgres
-   sudo exportfs -v
-   ```
-
-6. Stop here. DRBD metadata creation, DRBD promotion, filesystem creation, and
-   Pacemaker activation belong to later coordinated procedures. Never run
-   `mkfs` against `/dev/*-vg/drbd-*`; the filesystems will be created once through
-   the corresponding `/dev/drbd*` devices.
-
-LV creation from free extents can occur while the legacy exports remain online.
-The later DRBD/NFS activation and data cutover still require maintenance windows.
-Run Kubernetes workload discovery and shutdown from a MicroK8s control-plane
-host. On 2026-09-20 this worker's local `microk8s kubectl` could not query the
-cluster, while active NFS client sessions were present, so a local empty result
-must not be treated as proof that no consumers exist.
-
-## If capacity changes before execution
-
-Do not automatically fall back to shrinking. If either VG fails the allocation
-plus reserve check, stop and choose among reducing the proposed DRBD capacity,
-adding storage, or designing a separately reviewed offline shrink. An offline
-shrink requires verified file backups, a complete writer/client outage, export
-shutdown, unmount, `e2fsck`, `resize2fs` to an explicitly chosen filesystem
-size, a second `e2fsck`, and only then `lvreduce` to a size no smaller than the
-filesystem. That decision needs fresh minimum-size and growth evidence for every
-affected filesystem; the current inventory does not justify it.
+This allocation is part of the [state relocation](retire-legacy-nfs-lv.md),
+not a standalone instruction to run now. The existing
+`nfs-vg/drbd-nfs-state` is already configured and synchronized; placing a
+new LV in `kube-vg` requires a coordinated, resource-specific DRBD procedure
+that keeps `ubuntu-master2` authoritative. Never format the backing LV.
+The existing legacy `nfs-vg/nfs-lv` remains mounted and exported until its
+clients and data have been reviewed and the export is retired in a separate
+maintenance window.

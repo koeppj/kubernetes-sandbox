@@ -11,7 +11,7 @@ resource nfs-state {
 
     on ubuntu-slave1.koeppster.lan {
         device /dev/drbd4;
-        disk /dev/nfs-vg/drbd-nfs-state;
+        disk /dev/kube-vg/drbd-nfs-state;
         address 192.168.1.235:7792;
         meta-disk internal;
     }

@@ -1,5 +1,12 @@
 # DRBD installation and one-time initialization
 
+**Completed historical procedure.** It describes the initial five-resource
+layout that has since been narrowed to four resources for MicroK8s HA.
+The scripts in this procedure are retired and exit without taking action.
+Do not repeat these commands. Follow the
+[retirement runbook](retire-legacy-nfs-lv.md) and
+[current overview](drbd-pacemaker-nfs-ha-overview.md) instead.
+
 This procedure starts after all five backing LVs exist on both
 `ubuntu-slave1` and `ubuntu-master2`. It installs software, installs the five
 DRBD resource definitions, creates internal DRBD metadata on both peers, and
@@ -117,3 +124,6 @@ sudo blkid /dev/drbd0 /dev/drbd1 /dev/drbd2 /dev/drbd3 /dev/drbd4
 Stop after synchronization. Filesystem mounting, NFS ownership, exports,
 Pacemaker configuration, fencing, VIP activation, and legacy data copying are
 later reviewed stages.
+
+Continue with the [current four-resource checkpoint](nfs-ha-next-stage.md)
+after the obsolete resource and suspect-disk state backing are retired.
