@@ -8,9 +8,9 @@ private `nfs-state` resource. It does not include the legacy general NFS LV.
 Start with the [HA overview](drbd-pacemaker-nfs-ha-overview.md) and
 [current status](status-2026-09-26.md). The old disk backing that general LV
 logged I/O errors during initialization. The
-[retirement runbook](retire-legacy-nfs-lv.md) identifies the live export,
-boot mount, installed DRBD resource, and private-state backing path that
-must be changed before HA activation. The
+[retirement runbook](retire-legacy-nfs-lv.md) records the completed legacy
+export, boot mount, and DRBD resource retirement, plus the private-state
+backing-path move. Its final legacy-LV/VG cleanup step remains pending. The
 [next-stage runbook](nfs-ha-next-stage.md) covers the readiness checks and
 later NFS/Pacemaker design.
 
