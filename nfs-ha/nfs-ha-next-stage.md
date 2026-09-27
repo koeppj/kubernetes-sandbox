@@ -1,19 +1,30 @@
-# After DRBD initialization: readiness and HA service design
+# After DRBD initialization: master2-only service readiness
 
 This starts after the completed [one-time initialization](drbd-initialization.md).
-The 2026-09-26 inspection found a disk I/O incident on `ubuntu-slave1`;
-retire the unused resource and move private state off that disk before
-proceeding with the HA service design. This runbook does not
-activate a second NFS server, mount new filesystems, submit a CIB, or change
-Kubernetes storage endpoints. The current status is recorded in
-[status-2026-09-26.md](status-2026-09-26.md).
+The legacy export/obsolete resource retirement and private-state relocation
+completed on 2026-09-26. Both hosts passed the four-resource readiness check
+again during [implementation validation](validation-2026-09-26.md). The old
+physical disk fault remains unresolved and its storage must not be modified
+as part of HA activation.
 
-## 1. Resolve the storage incident
+The concrete [Pacemaker cutover runbook](pacemaker-cutover.md) now describes
+staging, bootstrap, ownership handoff, activation and rollback for the
+master2-only migration service. Its scripts produce private offline candidates
+and default to printing cutover plans. The operator confirmed the VIP's DHCP
+exclusion. No firewalls are in place. Kubernetes nodes are the NFS clients,
+mounting PVC-backed volumes through the NFS StorageClasses; test those mounts
+after activation. Quorum-loss tests remain activation gates. This demo/dev
+system has no required cluster, configuration, recovery-state or application
+backups.
+No HA service or Kubernetes endpoint was changed.
 
-The obsolete `nfs` resource is Diskless on `ubuntu-slave1` after ATA write
+## 1. Confirm completed isolation of the storage incident
+
+At the initial incident, the obsolete `nfs` resource became Diskless on `ubuntu-slave1` after ATA write
 errors on the physical disk that also backs the live legacy general export.
-Fresh read errors were observed on that disk. Treat this as an active storage
-incident, not a routine DRBD resync pause. Avoid repeated probing or any
+Fresh read errors were observed on that disk. The subsequent retirement
+removed this resource and moved private state to `kube-vg`; disk repair and
+legacy LVM cleanup remain separate incident work. Avoid repeated probing or any
 attempt to reattach the obsolete resource. Follow the
 [retirement runbook](retire-legacy-nfs-lv.md) to protect legacy data, retire
 its export and DRBD resource, and move private `nfs-state` to `kube-vg`.
@@ -81,70 +92,64 @@ ssh -T ubuntu-slave1.koeppster.lan 'sudo -n bash -s' < scripts/nfs-ha-service-in
 ```
 
 From a MicroK8s **control-plane** host, collect the NFS PVC/PV and client
-inventory and review `./bin/shutdown-nfs-workloads.sh --dry-run`. Inventory
-Jobs, CronJobs, unmanaged Pods, and non-Kubernetes NFS clients separately.
-No workload shutdown is needed for these read-only checks.
+inventory and review `./bin/shutdown-nfs-workloads.sh --dry-run`. Kubernetes
+nodes mount NFS-backed claims through the NFS StorageClasses. Review Jobs,
+CronJobs, unmanaged Pods and direct NFS volumes, and confirm this remains the
+complete client set. No workload shutdown is needed for these read-only checks.
 
-## 4. Close the activation design before writing live configuration
+## 4. Close the master2-only activation design
 
-Record the following concrete values and checks in a private maintenance
-record, and review them against both hosts:
+Record the following in a private maintenance record and review on both hosts:
 
-1. Select independent fencing hardware/agent credentials for **both** nodes.
-   Verify each device can cut power to the intended host and that fencing a
-   MicroK8s node is acceptable during the scheduled outage. Keep STONITH on.
-2. Select and test two-node Corosync quorum behavior and DRBD fencing
-   integration. A network partition must not allow both peers to mount ext4.
-3. Reserve an unused VIP distinct from `192.168.1.235` and `192.168.1.194`.
-   Verify the interface and prefix on each host, DHCP/MetalLB conflicts, DNS,
-   and client reachability. The name `nfs-ha.koeppster.lan` is only proposed.
-4. Map each verified client specification and exact options to its new
-   `/srv/ha/...` path. Reserve stable fsids only after checking the legacy
-   server. Keep `/var/lib/nfs-ha` private and never export it.
-5. Inspect the **installed** `ocf:heartbeat:nfsserver`, `exportfs`, and
-   `Filesystem` agent metadata and behavior. Confirm how `nfs_shared_infodir`
-   is bind-mounted onto `/var/lib/nfs`, the scope value used for NFSv4 recovery,
-   and safe stop timeouts. The state filesystem must be mounted before NFS.
-6. Define a service-ownership handoff for `ubuntu-slave1`. Its legacy exports
-   and the HA exports share one kernel NFS server; do not let systemd and
-   Pacemaker independently manage that server. Account for unmigrated clients
-   whenever the service is stopped, moved, or the host is fenced.
-7. Review the unit masks and enablement on both hosts. On `ubuntu-master2`,
-   Corosync, Pacemaker, DRBD's unit, and NFS server units were masked at the
-   status checkpoint. On `ubuntu-slave1`, the legacy NFS server is active and
-   enabled; cluster services are disabled. Resolve only the units required by
-   the reviewed Pacemaker/NFS design during activation, with DRBD and NFS
-   ownership clear.
+1. Confirm both Corosync votes are required: expected_votes: 2,
+   two_node: 0, wait_for_all: 1 and no-quorum-policy=stop. Test that either
+   isolated singleton is inquorate. Node fencing is disabled only because
+   the service and DRBD promotion are permanently banned on slave1; there
+   is no automatic takeover.
+2. The operator attributed the repeated enp2s0 link drops to unrelated
+   network maintenance, so that investigation is closed. Confirm both links
+   are up and replication is Connected, UpToDate/UpToDate before cutting
+   over. If master2 hangs, verify it is off before manual storage recovery.
+3. The operator confirmed VIP 192.168.1.240 is excluded from DHCP; no further
+   DHCP verification is required. No firewalls are in place. Authoritative
+   DNS for nfs-ha.koeppster.lan points there; validate PVC-backed NFS access
+   from Kubernetes nodes after activation.
+4. Map each verified client network and export option to its new
+   /srv/ha path; confirm fsids 102-104 do not conflict with live exports.
+   Keep /var/lib/nfs-ha private.
+5. Inspect the installed NFS server, exportfs, Filesystem and DRBD agents.
+   Confirm the shared NFSv4 recovery-state bind, scope and lease-aware stop
+   timeouts. DRBD resource-only peer-fencing handlers constrain promotion
+   but do not power off a node.
+6. Keep slave1's legacy NFS instance systemd-owned while unmigrated stacks
+   use it. Only master2 runs the new Pacemaker NFS instance. Confirm no
+   workload writes to both copies of a claim.
 
-The proposed Pacemaker group is `g-nfs-ha`: all four filesystem mounts,
-`p-nfs-server`, verified export resources, then `p-nfs-vip`. Each mount must be
-colocated and ordered after its promoted DRBD resource; the group/VIP must be
-ordered after **all four** promoted resources. Configure each DRBD resource as
-a single-promoted-instance clone. Check every resource/constraint against the
-installed agent metadata and use `crm_verify` and `crm_simulate` on a staged
-CIB before submission. Agent parameters in the overview are design intent,
-not validated commands for this Ubuntu build.
+The group is g-nfs-ha: four filesystem mounts, NFS server, six export
+primitives and VIP. It starts only after all four DRBD resources are
+promoted on master2. Review ordering, colocation, placement bans and
+quorum-loss stop ordering in the offline scheduler graphs.
 
-## 5. First activation window, once the design is complete
+## 5. First activation window
 
-Take a shared maintenance window. Review the live NFS workload set, stop all
-writers (including Jobs and external clients), and preserve backups. Stage
-Corosync, fencing, Pacemaker resources, mounts, exports, and VIP as separate
-reviewable artifacts. Validate syntax and simulation before starting services.
-Handoff legacy NFS ownership deliberately; promote/mount via Pacemaker only,
-then start the NFS/export resources, and assign the VIP last. Confirm the old
-unmigrated endpoint's availability before restoring its clients.
+Use a shared maintenance window. Stop writers (including Jobs and any clients
+outside the Kubernetes-node set), preserve their replica counts,
+then bootstrap both Corosync members with an empty application CIB.
+Confirm both votes are present and a controlled peer stop removes quorum.
+Submit only the stopped candidate; install the reviewed DRBD handler
+configuration after its clones exist; then activate explicitly. Follow
+[Pacemaker cutover](pacemaker-cutover.md) for commands and state checks.
 
-Exercise controlled switchover and a non-critical NFSv4 client recovery test.
-Check single Primary ownership, mounts, exports, fsids, scope, and VIP after
-each transition. Test the fencing path and network-partition behavior during
-the scheduled outage before relying on automatic failover. Keep Kubernetes
-StorageClasses and existing PVs at their current endpoint until this service
-passes validation; [the overview](drbd-pacemaker-nfs-ha-overview.md#per-stack-kubernetes-migration)
-describes the later per-stack data and binding migration.
+Test the new endpoint with a noncritical NFSv4.1 client, including file
+ownership, root squash, fsync and locks. A controlled quorum-loss test must
+stop the VIP and exports on master2. Do not move the group to slave1 or
+remove its five permanent restrictions. Leave the existing StorageClasses
+and PVs at the legacy endpoint until the new endpoint passes validation;
+then follow [gradual migration](gradual-migration.md) stack by stack.
 
-For reference, the installed ClusterLabs [NFS server agent](https://github.com/ClusterLabs/resource-agents/blob/main/heartbeat/nfsserver)
-documents shared information storage and NFSv4 server scope; the
+The installed ClusterLabs
+[NFS server agent](https://github.com/ClusterLabs/resource-agents/blob/main/heartbeat/nfsserver)
+documents shared information storage and NFSv4 scope; the
 [export agent](https://github.com/ClusterLabs/resource-agents/blob/main/heartbeat/exportfs)
-defines client specification and fsid handling. Verify the local package's
-version and metadata before rendering commands.
+defines client specification and fsid handling. Verify local metadata
+before executing an operation.

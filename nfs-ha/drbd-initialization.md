@@ -13,8 +13,9 @@ DRBD resource definitions, creates internal DRBD metadata on both peers, and
 creates each ext4 filesystem once through its DRBD device.
 
 It does not mount a filesystem, configure NFS exports, enable Corosync or
-Pacemaker, assign a VIP, or submit a CIB. Those actions remain blocked until
-the VIP, fencing, client networks, and legacy NFS service handoff are reviewed.
+Pacemaker, assign a VIP, or submit a CIB. The current master2-only cutover
+gates are in [Pacemaker cutover](pacemaker-cutover.md); this historical
+procedure's earlier power-fencing requirement is superseded.
 
 The one-time initialization source is `ubuntu-master2`. The source selection
 does not copy any legacy data; all five new filesystems begin empty.

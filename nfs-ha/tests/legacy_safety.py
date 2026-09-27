@@ -1,4 +1,8 @@
-"""Mocked checks for preflight, package installation, and preparation staging."""
+"""Historical tests for the retired nfs_ha.py one-time preparation helper.
+
+Kept as an incident record; this module is intentionally outside unittest's
+test_*.py discovery pattern because the helper was retired and removed.
+"""
 import copy
 import importlib.util
 import json
