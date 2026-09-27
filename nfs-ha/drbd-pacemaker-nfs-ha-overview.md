@@ -1,18 +1,19 @@
-# DRBD + Pacemaker NFS HA for MicroK8s
+# DRBD + Pacemaker master2-only NFS migration for MicroK8s
 
 ## Purpose and current boundary
 
-The target is one active NFS server at a time for the **three MicroK8s NFS
-exports**. A stable virtual IP (VIP) lets planned maintenance move the NFS
-service between `ubuntu-slave1.koeppster.lan` and
-`ubuntu-master2.koeppster.lan`. DRBD Protocol C replicates each exported
-filesystem and private NFS recovery state. Pacemaker owns promotion, mounts,
-NFS, exports, and the VIP. Fencing is required before automatic failover.
+The target is a **master2-only** NFS migration service for the three MicroK8s
+exports. A stable virtual IP (VIP) gives migrated clients one endpoint, but
+does not move to `ubuntu-slave1.koeppster.lan`. DRBD Protocol C replicates
+each exported filesystem and private NFS recovery state. Pacemaker owns
+promotion, mounts, NFS, exports, and the VIP on master2 only. There is no
+automatic failover or independent power-fencing requirement.
 
 This is a data-copy migration to new DRBD filesystems, followed by
 stack-by-stack Kubernetes PV rebinding. Existing StorageClass names and PVC
 names remain stable. The old endpoint stays active for unmigrated stacks.
-The HA service is **not active**. The [2026-09-26 status](status-2026-09-26.md)
+The HA service is **not active**. The [cutover runbook](pacemaker-cutover.md)
+and supporting scripts implement offline staging and gated Pacemaker operations. The [2026-09-26 status](status-2026-09-26.md)
 records a disk I/O incident on `ubuntu-slave1`; the
 [retirement runbook](retire-legacy-nfs-lv.md) describes removal of the unused
 legacy export and obsolete DRBD resource before HA activation.
@@ -29,9 +30,9 @@ legacy export and obsolete DRBD resource before HA activation.
 The data backing sizes are 200, 5, and 50 GiB; the private state backing is
 1 GiB. Total target allocation is **256 GiB per host**, with all four peer
 resources on `kube-vg` on `ubuntu-slave1`. The 255 GiB of data LVs and the
-1 GiB state LV on `ubuntu-master2` already exist. The old 1 GiB state LV on
-`nfs-vg` must be relocated to a newly created `kube-vg` LV; the repo template
-has the target path, but the installed DRBD configuration has not been changed.
+1 GiB state LV on `ubuntu-master2` already exist. The peer state resource was relocated to a new 1 GiB `kube-vg` LV on
+2026-09-26; the installed configuration now uses that path and both replicas
+are UpToDate. The unused old `nfs-vg` LV remains untouched.
 The last observed `kube-vg` free space was 56.51 GiB, leaving about 55.51 GiB
 after a 1 GiB allocation if unchanged. Recheck the live VG and PV identity.
 
@@ -63,17 +64,22 @@ normal `root_squash`. Preserve numeric ownership, modes, ACLs, and xattrs in
 PVC directories when copying. Continue NFSv4 over TCP with hard client mounts.
 
 `ubuntu-slave1` currently runs the legacy NFS server for these Kubernetes
-exports. Pacemaker and systemd must have one reviewed ownership handoff;
-separate export directories do not create separate kernel NFS servers. The
+exports. During migration it remains systemd-owned on slave1, while the new
+Pacemaker-owned NFS instance runs on master2. Never point one stack's writers
+at both copies. The
 VIP must come up only after all four DRBD resources are promoted, all four
 filesystems are mounted, and NFS plus the three exports are ready. Shutdown
 reverses that order. Validate NFSv4 server scope and shared recovery state
 with the installed `ocf:heartbeat:nfsserver` agent before activation.
 
 Use cluster name `nfs-ha`, service group `g-nfs-ha`, NFS primitive
-`p-nfs-server`, and VIP primitive `p-nfs-vip`. Keep the proposed DNS name
-`nfs-ha.koeppster.lan`; reserve a distinct VIP that is neither host's
-physical IP. Use four promotable DRBD resources, four filesystem primitives,
+`p-nfs-server`, and VIP primitive `p-nfs-vip`. The selected DNS name
+`nfs-ha.koeppster.lan` resolves to VIP `192.168.1.240`, which the operator
+confirmed is excluded from DHCP. No further DHCP verification is required;
+keep it distinct from either host's physical IP. No firewalls are in place;
+Kubernetes nodes connect through PVC-backed volumes using the NFS
+StorageClasses. Validate those mounts after activation. Use four promotable
+DRBD resources, four filesystem primitives,
 three sets of export resources, and one VIP. Preserve stable export fsids,
 for example 102–104 after verifying no conflict. Validate ordering and
 colocation against every promoted DRBD resource and simulate the CIB before
@@ -81,15 +87,17 @@ submission.
 
 ## Cluster safety and activation
 
-Corosync membership alone cannot prove that a peer has stopped writing when
-the two nodes lose contact. Select and test independent fencing for each host
-and a two-node quorum design before relying on automatic failover. Do not
-leave `stonith-enabled=false` as the finished configuration. Fencing an HA
-node also stops its MicroK8s workloads, so plan a shared maintenance window.
+Corosync uses two expected votes without the special two-node one-vote
+quorum rule. Pacemaker stops the master2-only service when quorum is lost,
+provided master2 can still run stop actions. Node fencing is disabled for
+this restricted design; slave1 has permanent service and promotion bans.
+A hung master2 cannot be isolated automatically, so recovery requires an
+operator to verify it is off before touching the DRBD data. Automatic
+two-host failover is not supported by this implementation.
 
 First resolve the storage incident, remove the obsolete DRBD resource,
 relocate private state to `kube-vg`, and run the four-resource readiness check
-on **both** hosts. Then finish VIP, fencing, client-network, export, NFS
+on **both** hosts. Then finish VIP, stable cluster networking, client-network, export, NFS
 recovery, and legacy service ownership design. Follow the
 [next-stage runbook](nfs-ha-next-stage.md) for ordered verification. Do not
 submit a CIB, mount the new filesystems, or change Kubernetes storage
@@ -97,11 +105,20 @@ endpoints while any prerequisite remains unresolved.
 
 ## Per-stack Kubernetes migration
 
-Keep `kube-nfs`, `kube-postgres`, and `kube-grafana`. When HA is ready, pause
-new provisioning and recreate their StorageClass objects under the same names
-with the VIP and `/srv/ha/kube-*` shares; server/share parameters are
-immutable. Existing PVs retain their original endpoints, so this change
-affects only future provisioning.
+The supported [gradual migration](gradual-migration.md) first confines the new
+service and DRBD promotion to `ubuntu-master2`, with service-group probes
+suppressed on `ubuntu-slave1`. Legacy NFS remains systemd-owned on slave1.
+There is no automatic service failover. After all stacks and external
+consumers move, retire the legacy exports while keeping the master2-only
+placement and promotion bans. The restart staging helper preserves them.
+
+Keep `kube-nfs`, `kube-postgres`, and `kube-grafana`. Pause new provisioning
+while gradually rebinding existing claims to explicit static PVs at the VIP.
+Leave the StorageClasses on the legacy endpoint during that phase. Once all
+consumers move and the master2-only service passes validation, recreate them
+under the same names with the VIP and new
+root shares for future provisioning; server/share parameters are immutable.
+Existing PVs retain their own endpoints throughout.
 
 Migrate one application's PVC directories per maintenance window. Record its
 PV/PVC objects, replica counts, exact old and new directories, and database
@@ -116,10 +133,13 @@ directories for rollback but do not allow writes to both copies.
 
 Review both NFS maintenance helpers after every workload/PVC change and run
 the shutdown dry run against the deployed result from a MicroK8s control-plane
-host. Jobs, unmanaged Pods, and external NFS clients require separate review.
+host. Current NFS clients are Kubernetes nodes mounting PVCs through the NFS
+StorageClasses. Review Jobs, unmanaged Pods and direct NFS volumes, and confirm
+this remains the complete client set before each migration window.
 Retire the old Kubernetes exports only after all consumers have moved.
 
-DRBD does not replace backups. Monitor peer disk health, DRBD connection and
-disk states, filesystem space/inodes, NFS recovery, and fencing. Routine
+This demo/development environment does not require separate backups; DRBD
+replication is not a backup. Monitor peer disk health, DRBD connection and
+disk states, filesystem space/inodes, NFS recovery, and quorum. Routine
 growth extends both backing LVs, resizes DRBD, then grows ext4 through the
 active DRBD device; do not shrink an established resource in place.

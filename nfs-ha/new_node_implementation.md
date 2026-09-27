@@ -1,4 +1,4 @@
-# NFS HA implementation reference
+# NFS migration service implementation reference
 
 The [overview](drbd-pacemaker-nfs-ha-overview.md) is the current design and
 the [next-stage runbook](nfs-ha-next-stage.md) is the current sequence. The
@@ -14,8 +14,9 @@ boundaries for the remaining implementation.
 | Existing NFS server | `ubuntu-slave1`; keep its three MicroK8s exports online until a reviewed ownership handoff |
 | `ubuntu-slave1` HA storage | `kube-vg` on the disk with PV UUID `ctmQ3z-B6pJ-MBgM-Zdw7-1Xrn-2Tnq-5q4swf` |
 | `ubuntu-master2` HA storage | `ubuntu-vg` on the approved Linux PV; exclude the Windows disk and root LV |
-| Fencing | Independent device/agent for both hosts, selected and tested before automatic failover |
-| VIP | TBD; neither physical node IP is the VIP |
+| Node fencing | Not required for the restricted master2-only migration service; automatic takeover is disabled |
+| Quorum | Both votes required; a peer or Corosync-link loss stops service when master2 can act |
+| VIP | `192.168.1.240`, on master2 only; neither physical node IP is the VIP |
 
 Do not use a `/dev/sd*` letter as a storage identity. On `ubuntu-slave1`,
 `nfs-vg` resides on the suspect physical I/O path described in
@@ -54,8 +55,13 @@ the reviewed state-relocation window.
 | Export IDs | `p-export-kube-<client-id>`, `p-export-grafana-<client-id>`, `p-export-postgres-<client-id>` |
 | Candidate fsids | 102, 103, 104 respectively; verify against the active export set |
 
-Use `nfs-ha.koeppster.lan` as a proposed service DNS name only after a free
-VIP is reserved. For future live configuration, keep component-local `.env`
+The selected service name `nfs-ha.koeppster.lan` currently resolves to
+`192.168.1.240`, which the operator confirmed is excluded from DHCP; no
+further DHCP verification is required before activation. Confirm client
+routing and test NFS access from Kubernetes nodes after activation; no
+firewalls are in place.
+It lies below the observed MetalLB and checked-in macvlan ranges. For future
+live configuration, keep component-local `.env`
 values and placeholder-only `.env.sample` files. The consuming components
 already use `nfs_server_ip`; change it to the VIP during their cutover, not
 during storage retirement.
@@ -73,9 +79,10 @@ Before activating HA, verify all four resources are Connected and
 `UpToDate/UpToDate` on both hosts, with only one Primary, correct backing
 paths, and no obsolete resource. Validate the installed agent metadata,
 Corosync configuration, staged Pacemaker CIB, ordering/colocation, NFSv4
-scope and recovery directory, exact clients/options, and fencing. Use
-`crm_verify` and `crm_simulate` on the staged CIB. No activation script or
-rendered CIB exists yet.
+scope and recovery directory, exact clients/options, the two-vote quorum
+policy, and all five permanent slave1 bans. Use `crm_verify` and
+`crm_simulate` on the staged CIB. The offline renderer and explicit cutover
+helper are described in [Pacemaker cutover](pacemaker-cutover.md).
 
 Keep `kube-nfs`, `kube-grafana`, and `kube-postgres` StorageClass names.
 Their current repository manifests are

@@ -63,11 +63,12 @@ Those installed paths have since been retired or updated as recorded above.
 1. **[COMPLETE 2026-09-26] Protect data and identify consumers.** Inventory client mount/fstab and
    automount configurations, application owners, and any direct use of
    `/srv/nfs-lv`. Inspect recent NFS activity without repeated full-disk
-   scans. Confirm backups or a recovery copy for data that must survive.
+   scans. Backups or recovery copies are not required for this demo/dev system.
    Resolve the physical disk/cable/controller fault first. Do not run LVM
    writes or DRBD reattach against the failing `nfs-vg` path.
 2. **[COMPLETE 2026-09-26] Retire the legacy export in a client maintenance window.** Stop or move
-   the identified clients. Back up `/etc/exports` and `/etc/fstab`. Remove only
+   the identified clients. Backing up `/etc/exports` and `/etc/fstab` is
+   optional in this demo/dev environment. Remove only
    the three `/srv/nfs-lv` entries from `/etc/exports`, then reload exports
    using the host's normal `exportfs -ra` procedure. Confirm `exportfs -v`
    still lists all three `kube-*` exports and no `/srv/nfs-lv` entry. Do not
@@ -107,7 +108,8 @@ Those installed paths have since been retired or updated as recorded above.
    mounts, exports, or needed data remain, assess whether the failing disk is
    to be repaired, replaced, or decommissioned. Any `lvremove`, `vgremove`,
    or `pvremove` is a separate destructive storage operation requiring exact
-   identities, backups, and a healthy I/O path. The MicroK8s HA work does not
+   identities and a healthy I/O path; backups are not required for this
+   demo/dev environment. The MicroK8s HA work does not
    require those removals to proceed once no HA resource uses `nfs-vg`.
 
 No Kubernetes StorageClass, PV, or PVC needs changing solely to retire

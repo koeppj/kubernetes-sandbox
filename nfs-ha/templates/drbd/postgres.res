@@ -1,6 +1,15 @@
 resource postgres {
     protocol C;
 
+    disk {
+        fencing resource-only;
+    }
+
+    handlers {
+        fence-peer "/usr/lib/drbd/crm-fence-peer.sh";
+        after-resync-target "/usr/lib/drbd/crm-unfence-peer.sh";
+    }
+
     net {
         allow-two-primaries no;
         after-sb-0pri disconnect;

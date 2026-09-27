@@ -1,0 +1,17 @@
+{
+  "reviewed_at": "REPLACE_WITH_UTC_ISO_TIMESTAMP",
+  "cib_sha256": "REPLACE_WITH_SHA256_OF_cib-stopped.xml",
+  "vip_reserved_and_reachable": false,
+  "fsids_clients_options_verified": false,
+  "partition_quorum_tested": false,
+  "drbd_peer_fencing_reviewed": false,
+  "both_hosts_ready": false,
+  "post_maintenance_links_and_drbd_verified": false,
+  "quorum_loss_outage_accepted": false,
+  "units_reviewed": false,
+  "simulation_reviewed": false,
+  "legacy_service_preserved": false,
+  "master2_nfs_handoff_complete": false,
+  "migration_no_failover_accepted": false,
+  "ha_writers_stopped": false
+}

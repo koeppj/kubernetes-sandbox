@@ -1,7 +1,10 @@
 # NFS HA for MicroK8s
 
-This directory holds the design, status, and tools for a two-node,
-active/passive NFS service for the MicroK8s PVC exports. The current target
+This directory holds the design, status, and tools for a two-member,
+master2-only NFS migration service for the MicroK8s PVC exports. There is
+no automatic failover or independent power-fencing requirement. Both
+Corosync votes are required; loss of either member stops the service when
+master2 can run its stop actions. The current target
 has **three exported data resources** (`kube`, `grafana`, `postgres`) and one
 private `nfs-state` resource. It does not include the legacy general NFS LV.
 
@@ -28,8 +31,8 @@ sudo ./scripts/nfs-ha-service-inventory.sh
 ```
 
 The readiness check requires the obsolete resource to be gone and the peer
-private-state backing LV to be moved to `kube-vg`. It will fail until those
-remediation steps are complete. The repository checkout on `ubuntu-slave1`
+private-state backing LV to be on `kube-vg`; both changes are complete in the
+latest checkpoint. The repository checkout on `ubuntu-slave1`
 may lag this one; the [next-stage runbook](nfs-ha-next-stage.md) shows how to
 stream the current read-only checks over SSH without installing them there.
 
@@ -38,3 +41,17 @@ control-plane host with working `microk8s kubectl`. The helpers cover
 Deployments and StatefulSets, not Jobs, unmanaged Pods, or external NFS
 clients. No HA mount, clustered NFS export, VIP, or Pacemaker CIB has been
 activated yet.
+
+For the next implementation window, use [Pacemaker cutover](pacemaker-cutover.md)
+and [validation results](validation-2026-09-26.md). `scripts/nfs-ha-collect.sh`
+collects private two-host and Kubernetes evidence; `nfs-ha-stage.sh` renders
+and checks offline candidates using `.env`; `nfs-ha-cutover.py` previews or
+explicitly executes submission, activation and stop operations.
+Read the handoff restrictions before executing any cutover action.
+
+The default is now **gradual migration**: see [the stack-by-stack guide](gradual-migration.md).
+The new service stays on master2 while legacy stacks remain on slave1.
+`nfs-ha-stack-plan.py` prepares per-claim copy mappings and prebound PV/PVC
+candidates without applying them. `nfs-ha-stage-finalize.py --restart` stages
+a fresh stopped migration snapshot for controlled reactivation. The scripts
+reject final HA, move and clear actions; slave1 cannot take over the service.
