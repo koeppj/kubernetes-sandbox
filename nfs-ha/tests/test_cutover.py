@@ -2,7 +2,9 @@
 import importlib.util
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from contextlib import redirect_stdout
+import io
 import os
 import sys
 from pathlib import Path
@@ -32,6 +34,117 @@ ENV = dict(NFS_HA_PHASE='migration', NFS_HA_VIP='192.168.1.240', NFS_HA_PREFIX='
 
 
 class Cutover(unittest.TestCase):
+    def exercise_record(self, action, changes=None, error=None, candidate_edit=None,
+                        live_edit=None, quorum=None):
+        """Exercise --execute with all external commands mocked, never the live cluster."""
+        with tempfile.TemporaryDirectory() as tmp:
+            stage = Path(tmp)
+            root = render.render(ENV)
+            if candidate_edit:
+                candidate_edit(root)
+            candidate = stage/'cib-stopped.xml'
+            render.write(root, candidate)
+            live = render.copy.deepcopy(root)
+            if live_edit:
+                live_edit(live)
+            record = {
+                'reviewed_at': datetime.now(timezone.utc).isoformat(),
+                'cib_sha256': hashlib.sha256(candidate.read_bytes()).hexdigest(),
+                **{g: True for g in cutover.GATES},
+                'legacy_service_state': 'retired', 'legacy_service_preserved': False,
+                **{g: True for g in cutover.RETIREMENT_GATES},
+                'legacy_retirement_evidence': 'Reviewed window notes: no consumers, exports, '
+                    'server threads, local mounts or boot/automount entries on slave1.'}
+            record.update(changes or {})
+            (stage/'record.json').write_text(json.dumps(record))
+
+            def query(args):
+                if args == ['hostname', '-f']:
+                    return cutover.PRIMARY
+                if args == ['corosync-quorumtool', '-s']:
+                    return quorum or 'Nodes: 2\nQuorate: Yes\nExpected votes: 2\nTotal votes: 2\nQuorum: 2\n'
+                if args == ['cibadmin', '--query']:
+                    return E.tostring(live, encoding='unicode')
+                if args == ['pcs', 'status', '--full']:
+                    return 'mock status'
+                self.fail(f'Unexpected query: {args}')
+
+            argv = ['cutover', action, '--stage', tmp, '--record', str(stage/'record.json'), '--execute']
+            with patch('sys.argv', argv), patch.object(os, 'geteuid', return_value=0), \
+                    patch.object(cutover, 'run', side_effect=query), \
+                    patch.object(subprocess, 'run') as command, redirect_stdout(io.StringIO()):
+                if error:
+                    with self.assertRaisesRegex(ValueError, error):
+                        cutover.main()
+                    self.assertFalse(any(c.args[0][0] == 'pcs' for c in command.call_args_list))
+                else:
+                    cutover.main()
+                    mutations = [c.args[0] for c in command.call_args_list if c.args[0][0] == 'pcs']
+                    if action == 'activate':
+                        self.assertEqual(mutations, [['pcs', 'resource', 'enable',
+                            *cutover.CLONES, 'g-nfs-ha', '--wait=1800']])
+                    else:
+                        self.assertEqual(mutations, [
+                            ['pcs', 'resource', 'disable', 'g-nfs-ha', '--wait=1800'],
+                            ['pcs', 'resource', 'disable', *cutover.CLONES, '--wait=600']])
+
+    def test_retired_record_allows_controlled_stop_and_activation(self):
+        for action in ('stop', 'activate'):
+            with self.subTest(action=action):
+                self.exercise_record(action)
+
+    def test_retired_record_requires_every_retirement_and_common_gate(self):
+        for gate in (*cutover.GATES, *cutover.RETIREMENT_GATES):
+            for value in (False, None, 'true', 1):
+                with self.subTest(gate=gate, value=value):
+                    self.exercise_record('activate', {gate: value}, 'Unresolved maintenance gates')
+
+    def test_retirement_record_rejects_ambiguous_or_incomplete_lifecycle(self):
+        for changes, error in [
+                ({'legacy_service_state': 'unknown'}, 'must be preserved or retired'),
+                ({'legacy_service_state': None}, 'must be preserved or retired'),
+                ({'legacy_service_state': 'preserved'}, 'conflicts with retirement'),
+                ({'legacy_service_preserved': True}, 'requires legacy_service_preserved=false'),
+                ({'legacy_service_preserved': None}, 'requires legacy_service_preserved=false'),
+                ({'legacy_retirement_evidence': ''}, 'requires legacy_retirement_evidence'),
+                ({'legacy_retirement_evidence': '  '}, 'requires legacy_retirement_evidence'),
+                ({'legacy_retirement_evidence': True}, 'requires legacy_retirement_evidence')]:
+            with self.subTest(changes=changes):
+                self.exercise_record('activate', changes, error)
+        self.exercise_record('submit', error='only for stop/activate')
+
+    def test_preserved_and_old_records_still_require_preservation(self):
+        for explicit in (False, True):
+            record = {'legacy_service_preserved': True}
+            if explicit:
+                record['legacy_service_state'] = 'preserved'
+            for action in ('submit', 'activate', 'stop'):
+                self.assertIn('legacy_service_preserved', cutover.required_gates('migration', record, action))
+        changes = {'legacy_service_state': 'preserved', 'legacy_service_preserved': True,
+                   **{g: False for g in cutover.RETIREMENT_GATES}, 'legacy_retirement_evidence': ''}
+        self.exercise_record('activate', changes)
+        self.exercise_record('activate', {**changes, 'legacy_service_preserved': False},
+                             'Unresolved maintenance gates')
+
+    def test_retired_activation_keeps_freshness_hash_quorum_and_config_guards(self):
+        for hours in (-5, 1):
+            self.exercise_record('activate', {'reviewed_at':
+                (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat()},
+                'within the last four hours')
+        self.exercise_record('activate', {'cib_sha256': 'wrong'}, 'does not match')
+        self.exercise_record('activate', error='Both votes and quorum',
+                             quorum='Nodes: 1\nQuorate: No\nExpected votes: 2\nTotal votes: 1\nQuorum: 2\n')
+        def change_config(root):
+            root.find('.//nvpair[@name="target-role"]').set('value', 'Started')
+        self.exercise_record('activate', live_edit=change_config, error='Live config differs')
+        for ban in ['migration-service-ban', *['migration-promote-ban-'+r
+                    for r in ('kube', 'grafana', 'postgres', 'nfs-state')]]:
+            def remove_ban(root):
+                constraints = root.find('./configuration/constraints')
+                constraints.remove(constraints.find(f'rsc_location[@id="{ban}"]'))
+            with self.subTest(ban=ban):
+                self.exercise_record('activate', candidate_edit=remove_ban, error='Incomplete migration')
+
     def test_live_quorum_guard_rejects_one_vote_mode(self):
         status = 'Nodes: 2\nQuorate: Yes\nExpected votes: 2\nTotal votes: 2\nQuorum: 2\n'
         cutover.require_live_two_vote_quorum(status)

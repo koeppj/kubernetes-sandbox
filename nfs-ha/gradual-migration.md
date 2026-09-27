@@ -170,34 +170,18 @@ rebind to stale old data. Preserve Retain on both sides during rollback.
 
 ## D. Retire legacy NFS after all consumers move
 
-1. Inventory every old-endpoint PV, direct NFS Pod, Job, external mount and
-   automount. Confirm all stack mappings have passed their application and
-   data checks. Retained offline rollback directories alone do not block
-   retirement; an active or future writer on the old endpoint does.
-2. In a reviewed maintenance window, stop migrated writers and use the
-   migration stage's cutover stop action with a fresh record.
-   Wait for the VIP, exports, group mounts and DRBD clones to stop. Check
-   actual state on both hosts; target-role=Stopped is not proof of stop.
-3. Retire the three legacy static exports on slave1. Stop/disable its
-   independent NFS service, preserving old local recovery state and rollback
-   directories. Verify old exports and threads are absent. Leave the new
-   master2-only placement and promotion bans untouched.
-4. With both Corosync votes present, stage a fresh stopped migration CIB
-   using `nfs-ha-stage-finalize.py --restart`, review its new hash and
-   maintenance record, and run `nfs-ha-cutover.py activate`. Verify the VIP,
-   all four mounts, recovery-state bind and six exports on master2 before
-   admitting any client. Keep migrated writers stopped until this check passes.
-5. With provisioning still paused, recreate the three existing NFS
-   StorageClasses with the .240 VIP and new root shares, preserving other
-   settings and the NFS CSI provisioner. The server/share parameters are
-   immutable. Update repository manifests, values and component .env
-   endpoints so later deploys cannot revert the change. Existing static
-   prebound PVs already use the VIP. Validate a disposable newly provisioned
-   claim before resuming provisioning.
-6. Run both bin/shutdown-nfs-workloads.sh --dry-run and
-   bin/restore-nfs-workloads.sh --dry-run from the repository root against
-   the deployed result. Review the saved replica state and restore only
-   the approved counts. Keep the old directories protected and unwritten.
+Use [final consumer cutover and legacy mount retirement](legacy-nfs-retirement.md)
+for the September 27 execution-stage review and complete remaining sequence.
+It covers the three StorageClasses, independent slave1 NFS service, local
+mounts and boot configuration, provisioning tests, application restoration
+and retained old data.
+
+The helper accepts `legacy_service_state=preserved` before retirement and
+`legacy_service_state=retired` for stop/activate after verified retirement.
+The latter requires `legacy_service_preserved=false`, all five retirement gates
+and a nonempty evidence note. Follow the retirement runbook's record table;
+all common gates and master2-only restrictions remain required. Initial
+submission still requires preserved legacy service.
 
 This completes consumer migration, not automatic HA. Corosync still requires
 both votes and Pacemaker can serve only from master2. If master2 fails,

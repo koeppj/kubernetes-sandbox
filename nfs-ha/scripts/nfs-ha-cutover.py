@@ -20,14 +20,32 @@ GATES = ('vip_reserved_and_reachable', 'fsids_clients_options_verified',
          'partition_quorum_tested', 'drbd_peer_fencing_reviewed', 'both_hosts_ready',
          'post_maintenance_links_and_drbd_verified', 'quorum_loss_outage_accepted',
          'units_reviewed', 'simulation_reviewed',
-         'legacy_service_preserved', 'master2_nfs_handoff_complete',
+         'master2_nfs_handoff_complete',
          'migration_no_failover_accepted', 'ha_writers_stopped')
+RETIREMENT_GATES = ('legacy_consumers_absent', 'legacy_exports_absent',
+                    'legacy_service_disabled', 'legacy_mounts_absent',
+                    'legacy_boot_mounts_removed')
 
 
-def required_gates(mode):
+def required_gates(mode, record, action):
     if mode != 'migration':
         raise ValueError('Only master2-only migration is supported')
-    return GATES
+    # Older migration records remain valid only under the preserved-service gate.
+    state = record.get('legacy_service_state', 'preserved')
+    if state == 'preserved':
+        if any(record.get(g) is True for g in RETIREMENT_GATES):
+            raise ValueError('Preserved legacy service conflicts with retirement assertions')
+        return GATES + ('legacy_service_preserved',)
+    if state != 'retired':
+        raise ValueError('legacy_service_state must be preserved or retired')
+    if action == 'submit':
+        raise ValueError('Retired legacy service is supported only for stop/activate, not submit')
+    if record.get('legacy_service_preserved') is not False:
+        raise ValueError('Retired legacy service requires legacy_service_preserved=false')
+    evidence = record.get('legacy_retirement_evidence')
+    if not isinstance(evidence, str) or not evidence.strip():
+        raise ValueError('Retired legacy service requires legacy_retirement_evidence')
+    return GATES + RETIREMENT_GATES
 
 
 
@@ -129,7 +147,7 @@ def main():
         raise ValueError('Maintenance record does not match the reviewed candidate')
     planned = E.parse(candidate).getroot()
     mode = phase(planned)
-    gates = required_gates(mode)
+    gates = required_gates(mode, record, a.action)
     if any(record.get(g) is not True for g in gates):
         raise ValueError('Unresolved maintenance gates: '+', '.join(g for g in gates if record.get(g) is not True))
     validate(planned)

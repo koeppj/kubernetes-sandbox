@@ -12,6 +12,15 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 source "$SCRIPT_DIR/../.env"
 export manifests_dir="$SCRIPT_DIR/../manifests"
 
+# A migrated installation must retain its exact prebound claims, including
+# the inactive PostgreSQL and recovery claims.
+pvc_states="$(python3 "$SCRIPT_DIR/../../nfs-ha/scripts/verify-migrated-claims.py" n8n \
+  n8n-pv-claim database-data-v17-postgres-n8n-v17-0 \
+  database-data-postgres-n8n-0 n8n-recovery-backup)"
+if grep -qx 'database-data-v17-postgres-n8n-v17-0 EXISTING' <<< "$pvc_states"; then
+  microk8s kubectl apply --dry-run=server -f "$manifests_dir/postgres-statefulset.yaml" >/dev/null
+fi
+
 encode() {
   printf '%s' "$1" | base64 | tr -d '\n'
 }
@@ -38,7 +47,11 @@ microk8s kubectl apply -f "$manifests_dir/postgres-configmap.yaml"
 microk8s kubectl apply -f "$manifests_dir/postgres-statefulset.yaml"
 microk8s kubectl -n n8n rollout status statefulset/postgres-n8n-v17 --timeout=5m
 
-microk8s kubectl apply -f "$manifests_dir/n8n-persistent-volume-claim.yaml"
+if grep -qx 'n8n-pv-claim NEW' <<< "$pvc_states"; then
+  microk8s kubectl apply -f "$manifests_dir/n8n-persistent-volume-claim.yaml"
+else
+  echo 'Preserving verified n8n/n8n-pv-claim binding.'
+fi
 microk8s kubectl apply -f "$manifests_dir/n8n-deployment.yaml"
 microk8s kubectl apply -f "$manifests_dir/jenkins-deployer-rbac.yaml"
 microk8s kubectl apply -f "$manifests_dir/n8n-service.yaml"

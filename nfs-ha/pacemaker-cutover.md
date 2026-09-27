@@ -15,6 +15,16 @@ final legacy-service retirement. Automatic two-host HA is outside this
 configuration. Removing the five migration restrictions or changing quorum to
 one vote is not a supported operation.
 
+## September 27 handoff
+
+The operator reports that bootstrap and gradual PVC migration are complete.
+Use [final consumer cutover and legacy mount retirement](legacy-nfs-retirement.md)
+for the reviewed execution stages and remaining work. Do not rerun initial
+submission or copy/rebind completed claims. That plan documents the
+`legacy_service_state=retired` record for stop/activate after legacy retirement.
+It requires all five retirement gates and an evidence note instead of the
+preserved-service assertion; initial submission still requires preservation. Retirement retains the master2-only availability boundary above.
+
 ## 1. Collect fresh evidence
 
 Run from the repository root on the control-plane host:
@@ -163,7 +173,10 @@ Include an ISO UTC review time within four hours and the SHA-256 of the
 candidate stopped CIB. In particular, confirm stable links, both votes and
 quorum-loss behavior, DRBD peer-fencing review, master2's NFS unit
 handoff, preserved legacy service, stopped writers for the new HA filesystems,
-and acceptance of no automatic failover. The helper refuses missing gates,
+and acceptance of no automatic failover. Use `legacy_service_state=preserved`
+and `legacy_service_preserved=true` for this bootstrap. After final legacy
+retirement, use the retired-state record documented in the retirement runbook
+for subsequent stop/activate operations. The helper refuses missing gates,
 a changed hash, an existing live resource/constraint, an altered migration
 ban, or a nonempty application CIB.
 

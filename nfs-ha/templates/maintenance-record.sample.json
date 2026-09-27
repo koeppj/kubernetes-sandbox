@@ -13,5 +13,12 @@
   "legacy_service_preserved": false,
   "master2_nfs_handoff_complete": false,
   "migration_no_failover_accepted": false,
-  "ha_writers_stopped": false
+  "ha_writers_stopped": false,
+  "legacy_service_state": "preserved",
+  "legacy_consumers_absent": false,
+  "legacy_exports_absent": false,
+  "legacy_service_disabled": false,
+  "legacy_mounts_absent": false,
+  "legacy_boot_mounts_removed": false,
+  "legacy_retirement_evidence": ""
 }

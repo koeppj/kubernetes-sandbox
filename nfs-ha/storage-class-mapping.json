@@ -1,0 +1,263 @@
+{
+  "schema_version": 2,
+  "recorded_date": "2026-09-27",
+  "status": "completed",
+  "path_base": "repository root",
+  "classes": [
+    {
+      "legacy_endpoint": {
+        "server": "192.168.1.235",
+        "share": "/srv/kube-lv"
+      },
+      "target_endpoint": {
+        "server": "192.168.1.240",
+        "share": "/srv/ha/kube-lv"
+      },
+      "provisioner": "nfs.csi.k8s.io",
+      "reclaim_policy": "Delete",
+      "volume_binding_mode": "Immediate",
+      "mount_options": [
+        "hard",
+        "nfsvers=4.1"
+      ],
+      "extra_parameters": {
+        "mountPermissions": "0777"
+      },
+      "existing_binding_policy": "Keep current PV/PVC storageClassName and bindings; no rename/rebind.",
+      "storageclass_source_manifest": "infrastruture/create-storage-class.yaml",
+      "literal_consumer_manifests": [
+        "n8n/manifests/n8n-persistent-volume-claim.yaml",
+        "n8n/manifests/recovery-backup.yaml",
+        "keyclock/manifests/keycloak-pvc.yaml",
+        "grafana+loki/manifests/loki-pvc.yaml",
+        "grafana+loki/manifests/box-collector-pv-claim.yaml",
+        "box/manifests/box-quarantine-state-pvc.yaml",
+        "test/test-pvc.yaml"
+      ],
+      "source_update_status": "updated_and_live_class_verified_2026-09-27",
+      "templated_consumers": [
+        {
+          "manifest": "meshcentral/manifests/meshcentral-pvc.yaml",
+          "environment": {
+            "path": "meshcentral/.env",
+            "variable": "MESH_STORAGE_CLASS",
+            "target_value": "kube-nfs",
+            "sample": "meshcentral/.env.sample",
+            "status": "unchanged_no_class_rename",
+            "note": "Keep this class-name setting unchanged; no environment update is required for class naming."
+          }
+        },
+        {
+          "manifest": "jenkins/manifests/jenkins-pvc.yaml",
+          "environment": {
+            "path": "jenkins/.env",
+            "variable": "JENKINS_STORAGE_CLASS",
+            "target_value": "kube-nfs",
+            "sample": "jenkins/.env.sample",
+            "status": "unchanged_no_class_rename",
+            "note": "Keep this class-name setting unchanged; no environment update is required for class naming."
+          }
+        }
+      ],
+      "name": "kube-nfs",
+      "class_update_policy": "Keep name; recreate StorageClass at target endpoint during cutover without changing existing PV/PVC bindings."
+    },
+    {
+      "legacy_endpoint": {
+        "server": "192.168.1.235",
+        "share": "/srv/kube-postgres"
+      },
+      "target_endpoint": {
+        "server": "192.168.1.240",
+        "share": "/srv/ha/kube-postgres"
+      },
+      "provisioner": "nfs.csi.k8s.io",
+      "reclaim_policy": "Delete",
+      "volume_binding_mode": "Immediate",
+      "mount_options": [
+        "hard",
+        "nfsvers=4.1"
+      ],
+      "extra_parameters": {},
+      "existing_binding_policy": "Keep current PV/PVC storageClassName and bindings; no rename/rebind.",
+      "storageclass_source_manifest": "infrastruture/postgres-storage-class.yaml",
+      "literal_consumer_manifests": [
+        "n8n/manifests/postgres-statefulset.yaml",
+        "keyclock/manifests/postgres-statefulset.yaml"
+      ],
+      "source_update_status": "updated_and_live_class_verified_2026-09-27",
+      "name": "kube-postgres",
+      "class_update_policy": "Keep name; recreate StorageClass at target endpoint during cutover without changing existing PV/PVC bindings."
+    },
+    {
+      "legacy_endpoint": {
+        "server": "192.168.1.235",
+        "share": "/srv/kube-grafana"
+      },
+      "target_endpoint": {
+        "server": "192.168.1.240",
+        "share": "/srv/ha/kube-grafana"
+      },
+      "provisioner": "nfs.csi.k8s.io",
+      "reclaim_policy": "Delete",
+      "volume_binding_mode": "Immediate",
+      "mount_options": [
+        "hard",
+        "nfsvers=4.1"
+      ],
+      "extra_parameters": {},
+      "existing_binding_policy": "Keep current PV/PVC storageClassName and bindings; no rename/rebind.",
+      "storageclass_source_manifest": "grafana+loki/manifests/grafana-storage-class.yaml",
+      "literal_consumer_manifests": [
+        "grafana+loki/manifests/grafana-pvc.yaml"
+      ],
+      "source_update_status": "updated_and_live_class_verified_2026-09-27",
+      "name": "kube-grafana",
+      "class_update_policy": "Keep name; recreate StorageClass at target endpoint during cutover without changing existing PV/PVC bindings."
+    }
+  ],
+  "endpoint_environment_updates": [
+    {
+      "path": ".env",
+      "variable": "nfs_server_ip",
+      "target_value": "192.168.1.240",
+      "sample": ".env.sample",
+      "status": "verified_on_ubuntu-mini_2026-09-27",
+      "note": "Do not assume the live environment file is available locally; record completion without copying secrets."
+    },
+    {
+      "path": "grafana+loki/.env",
+      "variable": "nfs_server_ip",
+      "target_value": "192.168.1.240",
+      "sample": null,
+      "status": "verified_on_ubuntu-mini_2026-09-27",
+      "note": "Do not assume the live environment file is available locally; record completion without copying secrets."
+    }
+  ],
+  "completion_evidence": {
+    "cutover_window": "nfs-ha/staging/retirement-20260927-220750",
+    "source_revision": "6c83986+storage-manifests-sha256:46ce8162c2467c6bbf67288b04b5146e9305a1dd2cdc1b54867aa0e03ed74349",
+    "environment_hosts_verified": [
+      "ubuntu-mini.koeppster.lan: root .env and grafana+loki/.env nfs_server_ip=192.168.1.240; three source manifests match HA shares; all ten migrated claim preflights and both PostgreSQL server dry runs passed"
+    ],
+    "render_validation": "nfs-ha/staging/retirement-20260927-220750/storageclasses and ubuntu-mini source/env checks on 2026-09-27; all three render to .240 HA shares and match live classes",
+    "maintenance_dry_runs": "nfs-ha/staging/retirement-20260927-220750/shutdown-dry-run-after-restore.txt and restore-dry-run-after-restore.txt",
+    "application_acceptance": "2026-09-27: operator manually tested all applications after restoration and reported that they operate as expected"
+  },
+  "notes": [
+    "This is a non-secret planning and follow-up mapping, not an executable Kubernetes manifest.",
+    "Keep historical migration-stage maps and legacy planner fixtures unchanged.",
+    "No class-renaming task exists. Only StorageClass endpoints/shares and NFS-server environment values require updates.",
+    "Verify NFS endpoint environment values on deployment hosts without copying secrets."
+  ],
+  "existing_stack_maintenance_guide": "nfs-ha/existing-stack-storage-maintenance.md",
+  "deployment_validation_requirements": [
+    "Validate expected existing PVC/PV identities and VIP directories before any deployment mutations.",
+    "Preserve existing Bound PVC class and volumeName; keep the same class names for new storage.",
+    "Preserve live StatefulSet volumeClaimTemplates on existing-installation updates.",
+    "Review PVC-deleting reload/destroy scripts and provide a data-preserving update path.",
+    "Verify error propagation and both maintenance dry runs before resuming deployment automation."
+  ],
+  "migrated_claims": [
+    {
+      "namespace": "grafana",
+      "claim": "box-collector-pv-claim",
+      "pvc_uid": "3db26993-b3ba-4485-8c64-aedb5c5a199b",
+      "pv": "ha-dea1561a9df0cd728a4e7421e0bdc08d",
+      "pv_uid": "27778e11-5577-4acf-8eae-ca258a856e70",
+      "storage_class": "kube-nfs",
+      "server": "192.168.1.240",
+      "share": "/srv/ha/kube-lv/pvc-b06e8e97-4972-485f-8726-fda4d0f78659"
+    },
+    {
+      "namespace": "grafana",
+      "claim": "grafana-pv-claim",
+      "pvc_uid": "a11e60ac-8725-438e-b444-20b277ee8fca",
+      "pv": "ha-7208033fd423bb8e588e1e59a10cf0bc",
+      "pv_uid": "f3d73866-0824-49ef-9116-fce95a83e7e8",
+      "storage_class": "kube-grafana",
+      "server": "192.168.1.240",
+      "share": "/srv/ha/kube-grafana/pvc-4bceb9de-4bc0-4927-8fba-e3309d0b733a"
+    },
+    {
+      "namespace": "grafana",
+      "claim": "loki-pv-claim",
+      "pvc_uid": "790a36b2-95b5-4803-b870-53ba732ef138",
+      "pv": "ha-3d4fc43e33323d63b218cf6d52d409e4",
+      "pv_uid": "b91460c4-326e-4fd1-8671-6653737bacb3",
+      "storage_class": "kube-nfs",
+      "server": "192.168.1.240",
+      "share": "/srv/ha/kube-lv/pvc-6ce20438-bf89-4b86-b66b-3ea6e32a6336"
+    },
+    {
+      "namespace": "keycloak",
+      "claim": "database-data-postgres-keycloak-0",
+      "pvc_uid": "38f20cb7-01a4-496b-850e-016dfa179adf",
+      "pv": "ha-9789a591a524d6b3d77391092f1d9c97",
+      "pv_uid": "adc94d50-1f1a-46ae-a0e7-95d30bea20a0",
+      "storage_class": "kube-postgres",
+      "server": "192.168.1.240",
+      "share": "/srv/ha/kube-postgres/pvc-2b732ec0-3589-4152-9e93-bc6b80149424"
+    },
+    {
+      "namespace": "keycloak",
+      "claim": "keycloak-data",
+      "pvc_uid": "fc6e4d7c-c361-443f-ae2f-198fa56335b2",
+      "pv": "ha-726c900ae61c6ee8465005c7d83dc26f",
+      "pv_uid": "826b665f-477f-4c93-8a26-7d0112e5f9c7",
+      "storage_class": "kube-nfs",
+      "server": "192.168.1.240",
+      "share": "/srv/ha/kube-lv/pvc-a914897f-e662-4fe6-bf9c-36e11aa056ed"
+    },
+    {
+      "namespace": "meshcentral",
+      "claim": "meshcentral-data",
+      "pvc_uid": "1b574937-d8d3-4145-ab81-1894326cce9a",
+      "pv": "ha-75129fd1c50f8f4896024394454bddaf",
+      "pv_uid": "4695145e-2457-4e5c-95bc-f9a8e894344f",
+      "storage_class": "kube-nfs",
+      "server": "192.168.1.240",
+      "share": "/srv/ha/kube-lv/pvc-be03149e-7acb-4049-89d4-027710f3fa29"
+    },
+    {
+      "namespace": "n8n",
+      "claim": "database-data-postgres-n8n-0",
+      "pvc_uid": "437cf06c-74e3-4aef-9b7f-72ad22c5c249",
+      "pv": "ha-a347162b59bfb0844eba7c5efc705135",
+      "pv_uid": "1214d0fe-cf10-4bf2-bc03-8c8808986c3f",
+      "storage_class": "kube-postgres",
+      "server": "192.168.1.240",
+      "share": "/srv/ha/kube-postgres/pvc-1e104840-84ce-4dc6-b579-9bb5b6553d14"
+    },
+    {
+      "namespace": "n8n",
+      "claim": "database-data-v17-postgres-n8n-v17-0",
+      "pvc_uid": "4003f730-f410-4178-b046-23b28b6219b9",
+      "pv": "ha-1b256f61fb5d3d82b24062a1cb97e487",
+      "pv_uid": "1faea846-9d7d-45d5-8ef6-c52358ce9513",
+      "storage_class": "kube-postgres",
+      "server": "192.168.1.240",
+      "share": "/srv/ha/kube-postgres/pvc-6e232a47-2ce4-43df-b6bc-165c7914bb4d"
+    },
+    {
+      "namespace": "n8n",
+      "claim": "n8n-pv-claim",
+      "pvc_uid": "820d6aaa-9bb2-4f98-a0ec-176e2884f45e",
+      "pv": "ha-481eb8385c28186a214b0e092883fce4",
+      "pv_uid": "7c76947c-f7ac-4dac-831b-fd879679812e",
+      "storage_class": "kube-nfs",
+      "server": "192.168.1.240",
+      "share": "/srv/ha/kube-lv/pvc-9f4c9510-98bc-4248-a901-996fb076f1a8"
+    },
+    {
+      "namespace": "n8n",
+      "claim": "n8n-recovery-backup",
+      "pvc_uid": "55bf89ac-6df3-4214-b449-85290606570f",
+      "pv": "ha-6282687cc2b5093bfaede13268d726b3",
+      "pv_uid": "696a5285-8301-435b-b60b-9bcd22a8cdf6",
+      "storage_class": "kube-nfs",
+      "server": "192.168.1.240",
+      "share": "/srv/ha/kube-lv/pvc-0052ed24-fc1c-4499-846a-73382a4bae7c"
+    }
+  ]
+}

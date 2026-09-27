@@ -16,6 +16,10 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 # Environment Variable Setups.  
 #
 source $SCRIPT_DIR/../.env
+[[ "${nfs_server_ip:-}" == "192.168.1.240" ]] || {
+  echo 'nfs_server_ip must be 192.168.1.240 before infrastructure deployment.' >&2
+  exit 1
+}
 export aws_access_key_id_encoded=$(echo ${aws_access_key_id} | tr -d '[:space:]' | base64)
 export aws_secret_access_key_encoded=$(echo ${aws_secret_access_key} | tr -d '[:space:]' | base64)
 export aws_default_region_encoded=$(echo ${aws_default_region} | tr -d '[:space:]' | base64)
