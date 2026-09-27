@@ -5,7 +5,7 @@ metadata:
 provisioner: nfs.csi.k8s.io
 parameters:
   server: ${nfs_server_ip}
-  share: /srv/kube-grafana
+  share: /srv/ha/kube-grafana
 reclaimPolicy: Delete
 volumeBindingMode: Immediate
 mountOptions:
