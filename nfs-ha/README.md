@@ -78,11 +78,19 @@ The [Grafana and Loki stack cutover plan](grafana-loki-cutover.md) covers its
 Grafana, Loki and Box collector state claims.
 The [Keycloak stack cutover plan](keycloak-cutover.md) covers its application
 data and PostgreSQL claims.
-The service stays on master2 after consumer migration and legacy retirement.
+The September 27 service was activated on master2 after consumer migration
+and legacy retirement. For a planned, two-host primary handoff, follow
+[the maintenance handoff procedure](maintenance-handoff.md). Its command can
+move the four DRBD primaries, NFS group and VIP to slave1 and back while both
+Corosync votes are present. The two-vote policy still stops NFS when either
+host goes offline. For this demo, [optional one-host operation](demo-failover.md)
+can be configured with a previewed CIB change and tested controlled outage.
+It accepts the split-brain risk of operating without node fencing.
 The linked stack documents are the original plans; the retirement runbook
 identifies their execution stages. The September 27 status records the live
 infrastructure retirement and operator application acceptance.
 `nfs-ha-stack-plan.py` prepares per-claim copy mappings and prebound PV/PVC
 candidates without applying them. `nfs-ha-stage-finalize.py --restart` stages
 a fresh stopped migration snapshot for controlled reactivation. The scripts
-reject final HA, move and clear actions; slave1 cannot take over the service.
+reject final HA, move and clear actions. Use only the maintenance handoff
+command to change which host is eligible to own the service.
