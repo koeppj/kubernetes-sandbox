@@ -86,6 +86,9 @@ Corosync votes are present. The two-vote policy still stops NFS when either
 host goes offline. For this demo, [optional one-host operation](demo-failover.md)
 can be configured with a previewed CIB change and tested controlled outage.
 It accepts the split-brain risk of operating without node fencing.
+The [October 2 network-partition incident and recovery plan](incident-2026-10-02-network-partition.md)
+records the unsafe concurrent promotion, the still-disconnected replicas,
+and configuration choices for safer one-host operation.
 The linked stack documents are the original plans; the retirement runbook
 identifies their execution stages. The September 27 status records the live
 infrastructure retirement and operator application acceptance.
