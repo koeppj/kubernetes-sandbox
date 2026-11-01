@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ntfy
+  namespace: ntfy
+data:
+  server.yml: |
+    # Server
+    base-url: "https://ntfy.johnkoepp.com"
+    behind-proxy: true
+
+    # Access control
+    auth-file: "/var/lib/ntfy/auth.db"
+    auth-default-access: "deny-all"
+    enable-login: true
+    require-login: true
+
+    # Message cache
+    cache-file: "/var/cache/ntfy/cache.db"
+
+    # Upstream (iOS notification wake-ups)
+    upstream-base-url: "https://ntfy.sh"

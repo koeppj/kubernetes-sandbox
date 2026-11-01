@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ntfy
+  namespace: ntfy
+spec:
+  replicas: 1
+  serviceName: ntfy
+  selector:
+    matchLabels:
+      app: ntfy
+  template:
+    metadata:
+      labels:
+        app: ntfy
+      annotations:
+        # Changes to either input restart the pod to reload config and auth.
+        checksum/config: "${ntfy_config_checksum}"
+        checksum/secret: "${ntfy_secret_checksum}"
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: ntfy
+          image: binwiederhier/ntfy:v2.36.0
+          args: ["serve", "--cache-file", "/var/cache/ntfy/cache.db"]
+          ports:
+            - containerPort: 80
+              name: http
+          env:
+            - name: NTFY_AUTH_USERS
+              valueFrom:
+                secretKeyRef:
+                  name: ntfy
+                  key: NTFY_AUTH_USERS
+            - name: NTFY_AUTH_ACCESS
+              valueFrom:
+                secretKeyRef:
+                  name: ntfy
+                  key: NTFY_AUTH_ACCESS
+            - name: NTFY_AUTH_TOKENS
+              valueFrom:
+                secretKeyRef:
+                  name: ntfy
+                  key: NTFY_AUTH_TOKENS
+          startupProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            periodSeconds: 30
+            failureThreshold: 3
+          volumeMounts:
+            - name: config
+              mountPath: /etc/ntfy
+              readOnly: true
+            - name: cache
+              mountPath: /var/cache/ntfy
+            - name: users
+              mountPath: /var/lib/ntfy
+      volumes:
+        - name: config
+          configMap:
+            name: ntfy
+        - name: cache
+          persistentVolumeClaim:
+            claimName: cache
+        - name: users
+          persistentVolumeClaim:
+            claimName: users
