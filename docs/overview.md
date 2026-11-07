@@ -1,113 +1,68 @@
-# Kubernetes Sandbox Overview
+# Kubernetes sandbox architecture
 
-This repository captures a MicroK8s lab environment built around shell-driven Kubernetes manifests. The deployment model is deliberately simple: shared cluster foundations are created from `infrastruture/`, and each application stack owns its namespace, manifests, scripts, and local configuration.
+This repository operates a four-node MicroK8s cluster (v1.33.13 in the [2026-11-07 live inventory](./component_inventory.md)). Shell scripts and component-local `.env` files drive selective manifest rendering and apply; Helm is used for shared controllers and Grafana/Loki. The `infrastruture/` and `keyclock/` spellings are the existing repository paths.
 
-The `infrastruture/` path is misspelled in the repository and should be treated as canonical unless a cleanup explicitly renames it everywhere.
+The [dependency guide](./dependencies.md) lists tools needed on the operator host and inside images. The [component inventory](./component_inventory.md) is the observed-state baseline for version and update impact assessments. This page describes the operating model and where currently running components fit.
 
-## Operator prerequisites
-
-The [dependency inventory](./dependencies.md) maps OS tools and packages to every
-stack, image build, and maintenance workflow, including Keycloak (`keyclock/`),
-Postfix, default/test examples, and planned NFS HA work. It distinguishes tools
-needed on the operator host from utilities supplied by containers. Read it before
-running the deployment or maintenance entry points below.
-
-## Deployment Model
+## Deployment and traffic flow
 
 ```mermaid
-flowchart TD
-    operator[Operator] --> env[Component .env and secret files]
-    env --> script[Deploy script in scripts/]
-    script --> render[Selective envsubst rendering]
-    script --> static[Static manifest apply]
-    render --> namespace[Namespace and labels]
-    render --> secrets[Kubernetes Secrets]
-    render --> storage[PVCs and StorageClasses]
-    static --> workloads[Deployments and StatefulSets]
-    static --> services[ClusterIP Services]
-    static --> routes[Gateway API HTTPRoutes]
-
-    infrastructure[Infrastructure stack] --> gateways[Shared Gateways]
-    infrastructure --> certs[cert-manager and ClusterIssuers]
-    infrastructure --> nfs[NFS CSI StorageClasses]
-    infrastructure --> ecr[AWS ECR secret updater]
-    infrastructure --> dns[Route53 and k8s_gateway DNS automation]
-
-    gateways --> routes
-    nfs --> storage
-    ecr --> namespace
-    certs --> gateways
-    dns --> routes
-
-    routes --> public[Public johnkoepp.com endpoints]
-    routes --> lan[LAN k8s.koeppster.lan endpoints]
+flowchart LR
+    Operator --> Scripts[Component deploy scripts]
+    Scripts --> Manifests[Selective envsubst + static manifests]
+    Scripts --> Helm[Helm releases]
+    Manifests --> Workloads[Namespaced workloads]
+    Helm --> Workloads
+    Internet --> Public[johnkoepp-com-gateway<br/>HTTP 80 / HTTPS 443 / SMTP 25]
+    LAN --> Private[koeppster-lan-gateway<br/>HTTP 80]
+    Public --> Routes[App HTTPRoutes]
+    Private --> Routes
+    Routes --> Workloads
+    Cert[cert-manager + ClusterIssuers] --> Public
+    DNS[awsdns / Route53 + k8s_gateway] --> Routes
+    NFS[NFS CSI + HA VIP] --> PVC[App PVCs]
+    PVC --> Workloads
+    ECR[AWS ECR secret updater] --> Workloads
 ```
 
-## Shared Infrastructure
+`infrastruture/create-infrastructure.sh` enables MicroK8s addons, installs Envoy Gateway and the NFS CSI driver, configures MetalLB, cert-manager, DNS automation, AWS credential propagation, and creates the shared Gateway objects. App scripts create or label their namespaces and apply Secrets, storage, workloads, Services, and routes. `grafana+loki/scripts/deploy.sh` also installs the Grafana and Loki Helm charts. The cluster's `ingress` addon is disabled; routing is through Gateway API.
 
-The infrastructure stack installs or configures the cluster-wide services that the app stacks depend on:
+The public Gateway uses a wildcard TLS certificate issued by cert-manager. Public apps commonly have an HTTPS route and an HTTP redirect route. The redirect carries `koeppster.net/aws_common_name` and `koeppster.net/aws_status` labels for the Route53 updater. The LAN Gateway serves `*.k8s.koeppster.lan` routes through the `exdns` k8s-gateway DNS release. Keycloak and ntfy set forwarded headers at their routes. The public Gateway has an SMTP listener, but no TCPRoute is installed at this snapshot.
 
-- MicroK8s addons: community, RBAC, cert-manager, MetalLB, registry, metrics-server, and KWasm.
-- Envoy Gateway as the Gateway API implementation.
-- NFS CSI driver and NFS-backed storage classes: `kube-nfs` and `kube-postgres`.
-- `cert-manager` ClusterIssuers and the wildcard/public gateway certificate.
-- `koeppster-lan-gateway` for LAN routes and `johnkoepp-com-gateway` for public HTTP/HTTPS routes.
-- AWS credential propagation, ECR pull-secret refresh, and Route53 record automation.
-- `k8s_gateway` for LAN DNS serving under `k8s.koeppster.lan`.
+## Current application paths
 
-Public routes generally use an HTTPS `HTTPRoute` that forwards traffic and a paired HTTP `HTTPRoute` that redirects to HTTPS. The HTTP redirect route is usually labeled with `koeppster.net/aws_common_name` and `koeppster.net/aws_status: waiting` so the Route53 updater can discover records.
+| Area | Active controllers and dependency | Endpoint / owner |
+| --- | --- | --- |
+| `n8n` | n8n and Box MCP Deployments; active PostgreSQL 17 StatefulSet; NFS PVCs. A PostgreSQL 14 StatefulSet is retained at zero replicas after migration. | `orchestration.johnkoepp.com`; `n8n/scripts/deploy-n8n.sh` |
+| `keycloak` | Keycloak Deployment and PostgreSQL 18 StatefulSet, both with NFS storage. | `idp.johnkoepp.com`; `keyclock/scripts/deploy.sh` |
+| `grafana` | Grafana Helm Deployment, Loki Helm StatefulSet and Promtail DaemonSet, Box event collector Deployment. | `grafana.johnkoepp.com`, `grafana.k8s.koeppster.lan`, `loki.k8s.koeppster.lan`; `grafana+loki/scripts/deploy.sh` |
+| `box` | Redaction Deployment and external `localapp` proxy Service/route. | `boxredact.johnkoepp.com`, `localapp.johnkoepp.com`; `box/scripts/deploy-redact.sh` and a separate proxy manifest |
+| `meshcentral` | MeshCentral Deployment with file-based configuration Secret and NFS PVC. | `mesh.johnkoepp.com`; `meshcentral/scripts/deploy.sh` |
+| `ntfy` | ntfy StatefulSet with cache/users NFS PVCs. | `ntfy.johnkoepp.com`; `ntfy/scripts/deploy.sh` |
+| `default` | Running httpbin and observer example Deployments; Box webhook proxy route and Service. | Public/LAN example endpoints; `default/` and `test/` manifests |
+| `afrba` | Two ECR-backed demo Deployments. | `rrdemo.johnkoepp.com`, `rrembed.johnkoepp.com`; maintained outside this repository |
 
-## Stack Inventory
+Shared infrastructure also runs cert-manager, Envoy Gateway with one proxy Deployment per Gateway, AWS DNS and ECR automation, k8s-gateway, NFS CSI, MetalLB, CoreDNS, metrics-server, registry, Calico, hostpath provisioner, and KWasm. See the inventory for every controller, image, chart and observed version.
 
-| Stack | Namespace | Entry point | Main resources | Routes |
-| --- | --- | --- | --- | --- |
-| Infrastructure | `infrastructure` plus cluster namespaces | `infrastruture/create-infrastructure.sh` | Gateways, ClusterIssuers, StorageClasses, AWS DNS/ECR automation | Shared `johnkoepp-com-gateway`, `koeppster-lan-gateway` |
-| n8n | `n8n` | `n8n/scripts/deploy-n8n.sh` | n8n Deployment, Postgres StatefulSet, Box MCP server, PVCs | `orchestration.johnkoepp.com` |
-| Keycloak | `keycloak` | `keyclock/scripts/deploy.sh` | Keycloak Deployment, Postgres StatefulSet, PVCs | `idp.johnkoepp.com` |
-| Grafana and Loki | `grafana` | `grafana+loki/scripts/deploy.sh` | Grafana Helm release, Loki Helm release, Box event collector, PVCs | `grafana.k8s.koeppster.lan`, `loki.k8s.koeppster.lan`, `grafana.johnkoepp.com` |
-| Box tools | `box` | `box/scripts/deploy-quarantine.sh`, `box/scripts/deploy-redact.sh` | Quarantine StatefulSet, redaction Deployment, PVC, file secrets | `boxredact.johnkoepp.com` |
-| MeshCentral | `${MESH_NAMESPACE}` from `.env`, sample `meshcentral` | `meshcentral/scripts/deploy.sh` | MeshCentral Deployment, PVC, file-based config Secret | `${MESH_HOSTNAME}` |
-| Jenkins | `jenkins` | `jenkins/scripts/deploy.sh` and `jenkins/manifests/` | Jenkins Deployment, ServiceAccount/RBAC, PVC | `jenkins.k8s.koeppster.lan` |
-| Default examples | `default` | direct manifest apply | macvlan, proxy endpoint examples, test workloads | `boxhook.johnkoepp.com` and ad hoc test routes |
+The `boxmcp` namespace has a Service and routes but no workload controller in the observed cluster. Jenkins, Box portal, Box quarantine, and Postfix have repository manifests but no deployed workload controller. The `postfix` namespace exists; no Postfix TCPRoute exists. Do not assume a repository directory implies a running app.
 
-## Storage Pattern
+## Persistence and maintenance
 
-The default persistence model is NFS-backed storage through the CSI driver:
+The NFS CSI classes `kube-nfs`, `kube-postgres`, and `kube-grafana` currently provision from the NFS HA virtual IP `192.168.1.240`, using separate exports. The [NFS HA documentation](../nfs-ha/README.md) records the completed consumer cutover and current handoff procedure. Existing PVs can retain their creation-time server and export paths even when the StorageClass points at the VIP, so inspect PVs as well as StorageClasses during a storage change. The MicroK8s registry uses `microk8s-hostpath`, outside the NFS maintenance helper's scope.
 
-- `kube-nfs` is used for general app data such as n8n, Jenkins, MeshCentral, Loki, and Box state.
-- `kube-postgres` is used by Postgres StatefulSet `volumeClaimTemplates`.
-- `kube-grafana` is a dedicated Grafana storage class for a separate Grafana NFS export.
+Use `./bin/shutdown-nfs-workloads.sh --dry-run` to review the current target set before NFS maintenance. The restore helper's `--dry-run` requires the replica state file written by a real shutdown (or a matching file passed with `--state-file`); run it after that file exists. The helpers inspect live pod templates for PVC mounts and cover Deployments and StatefulSets only. Account separately for Jobs, DaemonSets, unmanaged Pods, and external NFS clients. The [maintenance handoff](../nfs-ha/maintenance-handoff.md) describes stopping writers before moving the NFS primary.
 
-Most single-writer state uses `ReadWriteOnce`. `ReadWriteMany` appears where the current manifest expects shared access, such as the Jenkins home PVC and the n8n data PVC.
+## Manifest rendering and live-state checks
 
-## Templating Rules
+Deploy scripts run `envsubst` only for deploy-time placeholders, especially Secrets, PVCs, and selected routes. Postgres init ConfigMaps in `n8n/` and `keyclock/` contain shell variables that must survive until container runtime. Some apps create file-based Secrets with `microk8s kubectl create secret generic --from-file`.
 
-Deploy scripts use `envsubst` only where values are intended to be substituted at deployment time. This is important because some ConfigMaps contain shell or SQL snippets that must keep environment-variable syntax until the container starts.
+Review the component's deploy/check scripts and live `microk8s kubectl` state before an update. Known differences that matter here:
 
-Current examples:
+- `n8n/scripts/deploy-n8n.sh` applies the PostgreSQL 17 manifest; the old PostgreSQL 14 StatefulSet and its PVC remain as migration rollback artifacts.
+- `box/scripts/deploy-quarantine.sh` creates its Secret and ConfigMap in `box-enterprise-quarantine`, while its manifests target `box`. Resolve this before deploying quarantine.
+- `default/box-webhookd-route.yaml` uses hyphenated DNS label keys rather than the underscore keys the Route53 updater expects.
+- `grafana+loki/values/grafana-values.yaml` includes an inline admin password; treat that values file as sensitive.
 
-- `n8n/scripts/deploy-n8n.sh` and `keyclock/scripts/deploy.sh` encode Postgres credentials and apply Postgres init ConfigMaps without `envsubst`.
-- `grafana+loki/scripts/deploy.sh` combines raw manifest apply, Helm releases, and a file-based Box JWT secret.
-- `meshcentral/scripts/deploy.sh` creates a file-based config Secret from `meshcentral/secrets/config.json`.
-- `box/scripts/deploy-quarantine.sh` normalizes a Box JWT secret file before creating a Kubernetes Secret.
+## C4 source diagrams
 
-## Current Notes
-
-- `keyclock/` is the current path for the Keycloak stack and should remain unchanged unless a cleanup deliberately renames it.
-- `n8n/scripts/deploy-n8n.sh` references `box-mxp-server-secret-.yaml`, while the manifest present in the repo is `box-mcp-server-secret-.yaml`.
-- `box/scripts/deploy-quarantine.sh` creates secrets/config in `box-enterprise-quarantine`, while the committed Box manifests use namespace `box`.
-- `default/box-webhookd-route.yaml` uses label keys with hyphens (`koeppster.net/aws-common-name`, `koeppster.net/aws-status`) rather than the underscore keys used by most public routes.
-- `grafana+loki/values/grafana-values.yaml` contains an inline Grafana admin password value. Treat values files as sensitive when reviewing or sharing output.
-
-## C4 PlantUML Diagrams
-
-The C4 diagrams are stored as PlantUML source files:
-
-- [Infrastructure](./c4/infrastructure.puml)
-- [n8n](./c4/n8n.puml)
-- [Keycloak](./c4/keycloak.puml)
-- [Grafana and Loki](./c4/grafana.puml)
-- [Box tools](./c4/box.puml)
-- [MeshCentral](./c4/meshcentral.puml)
-- [Jenkins](./c4/jenkins.puml)
-- [Default examples](./c4/default.puml)
+The diagrams in [c4/](./c4/) show deployed paths for [infrastructure](./c4/infrastructure.puml), [n8n](./c4/n8n.puml), [Keycloak](./c4/keycloak.puml), [Grafana/Loki](./c4/grafana.puml), [Box](./c4/box.puml), [MeshCentral](./c4/meshcentral.puml), [ntfy](./c4/ntfy.puml), and [default examples](./c4/default.puml). The [Jenkins diagram](./c4/jenkins.puml) documents a repository-defined stack that is not currently deployed.

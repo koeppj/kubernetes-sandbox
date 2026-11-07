@@ -1,0 +1,36 @@
+@startuml ntfy
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title ntfy Namespace - C4 Container View
+
+Person(user, "User", "Publishes or receives notifications.")
+Person(operator, "Operator", "Runs ntfy/scripts/deploy.sh.")
+
+System_Boundary(cluster, "MicroK8s Cluster") {
+  Container_Boundary(ns, "namespace: ntfy") {
+    Container(routeHttps, "ntfy-route", "HTTPRoute", "HTTPS route with forwarded headers for ntfy.johnkoepp.com.")
+    Container(routeRedirect, "ntfy-redirect", "HTTPRoute", "HTTP to HTTPS redirect and Route53 labels.")
+    Container(ntfy, "ntfy", "StatefulSet: binwiederhier/ntfy:v2.36.0", "Notification service.")
+    ContainerDb(config, "ntfy", "ConfigMap + Secret", "Runtime configuration and credentials.")
+    ContainerDb(cachePvc, "cache", "PVC: kube-nfs", "Notification cache.")
+    ContainerDb(usersPvc, "users", "PVC: kube-nfs", "User database.")
+  }
+  Container(publicGateway, "johnkoepp-com-gateway", "Gateway", "Public shared gateway.")
+}
+
+System_Ext(route53, "AWS Route53", "DNS record for ntfy.johnkoepp.com.")
+System_Ext(nfs, "NFS HA service", "Backs ntfy PVCs through kube-nfs.")
+
+Rel(user, routeHttps, "connects to", "HTTPS")
+Rel(routeHttps, publicGateway, "attaches to")
+Rel(routeRedirect, publicGateway, "attaches to")
+Rel(routeRedirect, route53, "is discovered by labels for")
+Rel(routeHttps, ntfy, "forwards to", "Service ntfy:80")
+Rel(ntfy, config, "reads")
+Rel(ntfy, cachePvc, "mounts")
+Rel(ntfy, usersPvc, "mounts")
+Rel(cachePvc, nfs, "is provisioned on")
+Rel(usersPvc, nfs, "is provisioned on")
+Rel(operator, ntfy, "deploys with rendered manifests")
+
+@enduml

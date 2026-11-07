@@ -7,24 +7,24 @@ Person(operator, "Operator", "Runs MicroK8s, Helm, Docker, and deploy scripts.")
 
 System_Boundary(cluster, "MicroK8s Cluster") {
   Container_Boundary(infra, "namespace: infrastructure") {
-    Container(gwPublic, "johnkoepp-com-gateway", "Gateway API Gateway", "Public HTTP/HTTPS entry point for *.johnkoepp.com.")
+    Container(gwPublic, "johnkoepp-com-gateway", "Gateway API Gateway", "Public HTTP/HTTPS and SMTP listener (80/443/25).")
     Container(gwLan, "koeppster-lan-gateway", "Gateway API Gateway", "LAN entry point for *.k8s.koeppster.lan.")
-    Container(awsdns, "awsdns", "Pod", "Watches labeled Certificates and HTTPRoutes and UPSERTs Route53 records.")
+    Container(awsdns, "awsdns", "Deployment", "Watches labeled Certificates and HTTPRoutes and UPSERTs Route53 records.")
     Container(ecrRefresh, "aws-ecr-secret-update", "CronJob", "Refreshes AWS ECR image pull credentials for labeled namespaces.")
-    Container(k8sGateway, "exdns", "Helm release", "Serves LAN DNS records from Gateway API resources.")
+    Container(k8sGateway, "exdns", "Helm release: k8s-gateway", "Serves LAN DNS records from Gateway API resources.")
     ContainerDb(awsCreds, "aws-credentials", "Secret", "AWS credentials consumed by automation.")
   }
 
   Container(certManager, "cert-manager", "MicroK8s addon", "Issues ACME certificates through ClusterIssuers.")
   Container(envoy, "Envoy Gateway", "Helm release", "Gateway API implementation.")
   Container(nfsCsi, "NFS CSI driver", "Helm release", "Dynamic NFS-backed volume provisioning.")
-  ContainerDb(kubeNfs, "kube-nfs / kube-postgres", "StorageClass", "Shared general and Postgres NFS storage classes.")
+  ContainerDb(kubeNfs, "kube-nfs / kube-postgres / kube-grafana", "StorageClass", "CSI classes backed by NFS HA VIP 192.168.1.240.")
   ContainerDb(gatewayCert, "johnkoepp-com-tls", "Certificate", "TLS certificate for public gateway listeners.")
 }
 
 System_Ext(route53, "AWS Route53", "Public DNS zone.")
 System_Ext(ecr, "AWS ECR", "Private container registry.")
-System_Ext(nfs, "NFS Server", "External NFS exports.")
+System_Ext(nfs, "NFS HA service", "DRBD/Pacemaker managed exports at virtual IP 192.168.1.240; handoff is operator controlled.")
 
 Rel(operator, gwPublic, "creates and configures through", "create-infrastructure.sh")
 Rel(operator, awsdns, "deploys through", "create-infrastructure.sh")

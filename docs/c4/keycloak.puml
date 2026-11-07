@@ -10,7 +10,7 @@ System_Boundary(cluster, "MicroK8s Cluster") {
   Container_Boundary(ns, "namespace: keycloak") {
     Container(routeHttps, "keycloak-route", "HTTPRoute", "HTTPS route attached to johnkoepp-com-gateway.")
     Container(routeRedirect, "keycloak-redirect", "HTTPRoute", "HTTP to HTTPS redirect and Route53 discovery labels.")
-    Container(keycloak, "keycloak", "Deployment: quay.io/keycloak/keycloak:26.3.3", "Identity provider with proxy-aware forwarded headers.")
+    Container(keycloak, "keycloak", "Deployment: quay.io/keycloak/keycloak:26.7.3", "Identity provider with proxy-aware forwarded headers.")
     ContainerDb(pg, "postgres-keycloak", "StatefulSet: postgres:18.1", "Keycloak database.")
     ContainerDb(keycloakSecret, "keycloak-secret", "Secret", "Bootstrap admin credentials.")
     ContainerDb(pgSecret, "postgres-secret", "Secret", "Postgres credentials.")

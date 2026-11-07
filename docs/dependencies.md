@@ -1,7 +1,8 @@
 # Deployment and maintenance dependencies
 
-This inventory follows the repository's shell scripts, Dockerfiles, embedded
-container commands, and operating guides. Package names below are Ubuntu/Debian
+This tool inventory follows the repository's shell scripts, Dockerfiles, embedded
+container commands, and operating guides. The [component inventory](./component_inventory.md)
+records currently deployed images, charts, and versions. Package names below are Ubuntu/Debian
 names; they identify which package provides a tool, not a command to upgrade an
 existing host. Image pins remain in the Dockerfiles and manifests. Install only
 the groups needed for the operation you are performing.
@@ -82,13 +83,14 @@ repository root.
 | n8n: `n8n/scripts/` | `envsubst`, `base64`, `tr`, component `.env`, and n8n/Box credentials or existing Secrets. Recovery helper needs existing completed backup Jobs and recovery PVC; database tools run in Jobs (see below). |
 | Keycloak: `keyclock/scripts/` | `envsubst`, `base64`, `tr`, component `.env`; `grep` for destroy-time PostgreSQL PVC discovery. |
 | Grafana/Loki: `grafana+loki/scripts/` | `envsubst`, `microk8s helm`, component `.env`, chart repository access, and `secrets/sandbox.json`. Reload-events also invokes Helm. |
-| Box quarantine: `box/scripts/*quarantine.sh` | Deploy requires `envsubst`, `sed`, `mktemp`, `rm`, `box/.env`, `secrets/box-jwt-auth.json`, and `config/quarantine-template.txt`. Pause/resume use only MicroK8s. Current scripts target `box-enterprise-quarantine` for secrets/scaling while manifests use `box`; resolve this documented namespace mismatch before deployment. |
-| Box portal: `box/scripts/*portal*.sh` | Deploy sources `box/.env` and requires the session secret plus `secrets/oidc.json`, `secrets/box-jwt-auth.json`, and `secrets/box_config.json`. It applies static YAML and does not invoke `envsubst`. |
-| Box redaction: `box/scripts/*redact.sh` | MicroK8s and `dirname`; these scripts apply/remove the Service and route, and do not build the application image. |
+| ntfy: `ntfy/scripts/` | `envsubst`, component `.env`, `microk8s kubectl`, existing `kube-nfs` StorageClass and public Gateway; deploy checks NFS maintenance discovery. |
+| Box quarantine: `box/scripts/*quarantine.sh` | Not currently deployed. Deploy requires `envsubst`, `sed`, `mktemp`, `rm`, `box/.env`, `secrets/box-jwt-auth.json`, and `config/quarantine-template.txt`. Pause/resume use only MicroK8s. Current scripts target `box-enterprise-quarantine` for secrets/scaling while manifests use `box`; resolve this documented namespace mismatch before deployment. |
+| Box portal: `box/scripts/*portal*.sh` | Not currently deployed. Deploy sources `box/.env` and requires the session secret plus `secrets/oidc.json`, `secrets/box-jwt-auth.json`, and `secrets/box_config.json`. It applies static YAML and does not invoke `envsubst`. |
+| Box redaction: `box/scripts/*redact.sh` | MicroK8s and `dirname`; these scripts apply/remove the Service, Deployment, and route, and do not build the application image. |
 | MeshCentral: `meshcentral/scripts/` | `envsubst` for deploy/destroy, component `.env`, and `secrets/config.json`; reload creates the Secret and restarts the workload. |
-| Jenkins: `jenkins/scripts/deploy.sh` | `envsubst`, `base64`, `tr`, `sed`, **local AWS CLI** supporting `ecr get-login-password`, component `.env`, AWS/GitHub credentials, and pre-published controller/tools images. `openssl` is used by the README's webhook-secret generation command. |
+| Jenkins: `jenkins/scripts/deploy.sh` | Not currently deployed. Requires `envsubst`, `base64`, `tr`, `sed`, **local AWS CLI** supporting `ecr get-login-password`, component `.env`, AWS/GitHub credentials, and pre-published controller/tools images. `openssl` is used by the README's webhook-secret generation command. |
 | Jenkins image publishing: `jenkins/scripts/build-controller.sh`, `build-tools.sh` | Docker CLI and daemon, component `.env`, and an authenticated registry session authorized to push. These scripts do not log Docker in. Deployment does not call these builders. |
-| Postfix: `postfix/scripts/` | `envsubst`, `sed`, component `.env`; Docker CLI/daemon and registry push access by default because deploy calls `build.sh`. With `POSTFIX_BUILD_IMAGE=false`, a previously published image is required instead. Preview/destroy still require `envsubst`. |
+| Postfix: `postfix/scripts/` | Not currently deployed, though its namespace and the shared Gateway SMTP listener exist. Requires `envsubst`, `sed`, component `.env`; Docker CLI/daemon and registry push access by default because deploy calls `build.sh`. With `POSTFIX_BUILD_IMAGE=false`, a previously published image is required instead. Preview/destroy still require `envsubst`. |
 | Default and test manifests: `default/`, `test/` | `microk8s kubectl`; additional CRDs, storage, network attachments, runtimes, or images required by the selected example must already exist. Diagnostic commands run in the selected debug image. |
 
 Docker builds/pushes require access to base-image registries and the destination
@@ -130,8 +132,8 @@ and separately account for Jobs/unmanaged Pods using NFS.
   including `exportfs`, on Ubuntu) and the configured exports, ownership, and
   network access. General app storage uses `kube-nfs`, PostgreSQL uses
   `kube-postgres`, and Grafana uses its dedicated `kube-grafana` export/class.
-- The local `nfs-ha/` planning documents describe a separate, **planned** storage
-  server workflow: `lvm2`, `drbd-utils` and a compatible kernel DRBD module,
+- The local `nfs-ha/` documents describe the **implemented** storage-server
+  service and later-stage work: `lvm2`, `drbd-utils` and a compatible kernel DRBD module,
   `pacemaker`, `pacemaker-cli-utils` (`crm_verify`, `crm_simulate`), `corosync`,
   `pcs`, `resource-agents-base`, `resource-agents-extra`, `nfs-kernel-server`,
   `nfs-common`, `rsync`, `acl` (`getfacl`/`setfacl`), `attr`
@@ -141,15 +143,18 @@ and separately account for Jobs/unmanaged Pods using NFS.
   utilities are server-side concerns (`lvm2`, `e2fsprogs`, `mount`, `util-linux`):
   examples include `pvs`/`vgs`/`lvs`, `vgcfgbackup`, `lvcreate`/`lvextend`,
   `mkfs.ext4`/`resize2fs`, `lsblk`, `findmnt`, and `flock`.
-  Fencing hardware and its appropriate agent remain prerequisites for HA
-  activation. These are not dependencies of ordinary app deployment or the
-  existing `bin/` NFS maintenance scripts.
+  The current two-member service has no automatic failover or independent
+  power fencing; the [NFS HA overview](../nfs-ha/README.md) explains its
+  two-vote stop behavior and optional demo mode. These server-side tools are
+  not dependencies of ordinary app deployment or the existing `bin/` NFS
+  maintenance scripts.
 - Infrastructure installs/enables community, RBAC, cert-manager, MetalLB,
   registry, metrics-server, KWasm, Envoy Gateway, NFS CSI, and `k8s_gateway`.
   Multus/network-attachment support must also be present for the macvlan
   example, including the `macvlan` and `host-local` CNI plugins; infrastructure
   setup does not currently enable Multus. SpinKube has
-  its own install entry point.
+  its own install entry point; the Spin operator is not deployed in the current
+  cluster snapshot.
 - App routes depend on shared Gateways and Gateway API CRDs; public TLS routes
   also need cert-manager/issuers/certificates and working DNS. Postfix needs the
   `TCPRoute` CRD and the shared Gateway's SMTP listener. Its host forwarding
@@ -190,7 +195,7 @@ Rendering `docs/c4/*.puml` locally requires PlantUML and a Java runtime, with
 Graphviz (`dot`) for the diagrams' layout. The files use `!includeurl` for
 C4-PlantUML, so rendering needs access to the referenced GitHub content or a
 locally configured copy. Reading Markdown alone requires none of these tools.
-ShellCheck is specified by the planned NFS HA script validation; existing app
+ShellCheck is specified by NFS HA script validation; existing app
 scripts have no automated test harness or mandatory local ShellCheck step.
 
 ## Read-only prerequisite checks

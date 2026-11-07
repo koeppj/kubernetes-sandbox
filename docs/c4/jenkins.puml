@@ -1,7 +1,7 @@
 @startuml jenkins
 !includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
 
-title Jenkins Namespace - C4 Container View
+title Jenkins Repository Design - Not Deployed in Current Cluster
 
 Person(user, "User", "Uses Jenkins on the LAN.")
 Person(operator, "Operator", "Builds/applies Jenkins resources.")
